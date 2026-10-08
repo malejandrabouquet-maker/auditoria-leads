@@ -202,7 +202,7 @@ const EXC=[
  {k:"slack",n:"Agendó pero no llegó el aviso a Slack",d:"Tiene cita activa en GHL y no hay aviso en #comercial-agenda. Nadie se enteró.",g:1},
  {k:"cita",n:"El filtro no canceló la cita",d:"Tiene etiqueta no_cualifica pero su cita sigue activa.",g:1},
  {k:"sintag",n:"Sin etiqueta del flujo",d:"No tiene etiqueta y no está en Agendas: puede que el flujo no haya corrido.",g:2},
- {k:"tag",n:"Etiqueta distinta a la regla del flujo",d:"La etiqueta que tiene no coincide con la que le corresponde por sus respuestas.",g:2},
+ {k:"tag",n:"Etiqueta distinta a la regla del flujo",d:"No está en Agendas y la etiqueta que tiene no coincide con la que le corresponde por sus respuestas.",g:2},
  {k:"hueco",n:"Dijo que no puede invertir y el flujo lo dejó pasar",d:"Respondió \"No, ahora mismo no puedo\" u \"Hoy no cuento con dinero\", opción que la regla del flujo no descalifica.",g:2}];
 const SRC={A:"Ads",B:"Bio"}; const SRCCOL={A:"#2563EB",B:"#0D9488"};
 const TAGLBL={no_cualifica:"no_cualifica",puede_cualificar:"puede_cualificar",cualifica:"cualifica"};
@@ -310,13 +310,14 @@ async function load(fresh){
       const ref=l.cita?(l.cita.added||l.cita.start):s.at;
       l.slack=msgT.some(m=>nameIn(l.name,m)&&m.at>=Math.min(ref,s.at)-3600e3&&m.at<=ref+3*DAY);
       l.agendo=!!l.cita||l.slack;
-      // Sin etiqueta pero en Agendas: pasó el filtro (cualificaba o era posible); manda su etapa en Agendas.
-      l.passed=!l.tag&&!!ag;
-      const tagEff=l.tag||(l.passed?(l.expected==="no_cualifica"?"cualifica":l.expected):l.expected);
+      // Si está en Agendas, pasó el filtro del form (cualificaba o era posible) y manda su etapa ahí.
+      // Su etiqueta actual puede venir de una decisión posterior (por ejemplo no_cualifica al descalificarlo en la llamada).
+      l.inAg=!!ag; l.passed=l.inAg&&!l.tag;
+      const tagEff=l.inAg?(l.expected==="no_cualifica"?"cualifica":l.expected):(l.tag||l.expected);
       l.tagEff=tagEff;
       // columna
       const a=norm(l.ag);
-      if(tagEff==="no_cualifica") l.col="nc";
+      if(!ag&&tagEff==="no_cualifica") l.col="nc";
       else if(l.agendo||ag){
         if(!ag) l.col="st";
         else if(a.startsWith("nutricion")||/^(asistencia|no asistio|sena|venta)/.test(a)) l.col="co";
@@ -327,9 +328,9 @@ async function load(fresh){
       else l.col=tagEff==="puede_cualificar"?"po":"cn";
       // excepciones
       if(l.citaActiva&&!l.slack&&tagEff!=="no_cualifica") l.exc.push("slack");
-      if(l.tag==="no_cualifica"&&l.citaActiva) l.exc.push("cita");
+      if(!ag&&l.tag==="no_cualifica"&&l.citaActiva) l.exc.push("cita");
       if(!l.tag&&!ag) l.exc.push("sintag");
-      if(l.tag&&l.tag!==l.expected) l.exc.push("tag");
+      if(!ag&&l.tag&&l.tag!==l.expected) l.exc.push("tag");
       if(saidNo(l)&&tagEff!=="no_cualifica") l.exc.push("hueco");
       l.where=ag?"Agendas · "+l.ag:sg?"Seguimientos · "+l.sg:lp?"Leads (Prospección) · "+l.lp:"Sin oportunidad";
       return l;
@@ -359,11 +360,11 @@ function render(){
   document.getElementById("bar").innerHTML=COLS.filter(c=>cnt(c.k)).map(c=>`<button type="button" style="flex:${cnt(c.k)};background:${c.c}" title="${esc(c.n)}: ${cnt(c.k)}">${n&&cnt(c.k)*100/n>=6?Math.round(cnt(c.k)*100/n)+"%":""}</button>`).join("");
   document.getElementById("legend").innerHTML=COLS.map(c=>`<div class="leg" style="cursor:default"><span class="dot" style="background:${c.c}"></span><span class="n num">${cnt(c.k)}</span><span class="l">${c.n}</span></div>`).join("");
   // clasificación
-  const withTag=L.filter(l=>l.tag), ok=withTag.filter(l=>l.tag===l.expected).length;
+  const withTag=L.filter(l=>l.tag&&!l.inAg), ok=withTag.filter(l=>l.tag===l.expected).length;
   document.getElementById("clasif").innerHTML=`<div class="legend" style="margin-top:0">
-    <div class="leg" style="cursor:default"><span class="dot" style="background:#16A34A"></span><span class="n num">${ok}</span><span class="l">clasificados según la regla del flujo</span></div>
-    <div class="leg" style="cursor:default"><span class="dot" style="background:#DC2626"></span><span class="n num">${withTag.length-ok}</span><span class="l">con una etiqueta distinta a la que corresponde</span></div>
-    <div class="leg" style="cursor:default"><span class="dot" style="background:#6B7280"></span><span class="n num">${L.filter(l=>l.passed).length}</span><span class="l">sin etiqueta pero en Agendas (pasaron el filtro)</span></div>
+    <div class="leg" style="cursor:default"><span class="dot" style="background:#16A34A"></span><span class="n num">${ok}</span><span class="l">fuera de Agendas, con la etiqueta que les corresponde</span></div>
+    <div class="leg" style="cursor:default"><span class="dot" style="background:#DC2626"></span><span class="n num">${withTag.length-ok}</span><span class="l">fuera de Agendas, con una etiqueta distinta a la que corresponde</span></div>
+    <div class="leg" style="cursor:default"><span class="dot" style="background:#6B7280"></span><span class="n num">${L.filter(l=>l.inAg).length}</span><span class="l">en Agendas (pasaron el filtro; manda su etapa ahí)</span></div>
     <div class="leg" style="cursor:default"><span class="dot" style="background:#9CA3AF"></span><span class="n num">${L.filter(l=>!l.tag&&!l.passed).length}</span><span class="l">sin etiqueta y fuera de Agendas</span></div>
     <div class="leg" style="cursor:default"><span class="dot" style="background:#B45309"></span><span class="n num">${L.filter(l=>l.exc.includes("hueco")).length}</span><span class="l">dijeron que no pueden invertir y pasaron (hueco de la regla)</span></div></div>`;
   // excepciones
