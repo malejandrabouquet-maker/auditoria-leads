@@ -185,7 +185,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:22px;max-width:76ch}
     <div class="cols" id="board"></div>
   </div>
 
-  <footer>Población: personas que completaron "Datos Cita VSL - Founders" (Ads) o "Datos Cita VSL - Founders - IG" (Bio) en el período; si alguien lo completó varias veces, cuenta la última. Etiqueta: la que puso el flujo (no_cualifica, puede_cualificar, cualifica), leída desde sus oportunidades en GHL. Regla del flujo: no cualifica si el modelo es Comercio o Clínicas, o si respondió "No, no puedo invertir en mi…"; posible si es Consultoría o Agencia; el resto cualifica. Agendó = tiene una cita en el calendario de GHL creada después del form. Llegó a Slack = hay un aviso en #comercial-agenda con su nombre. Confirmadas = en Nutrición - confirmación (las que siguieron con los closers también cuentan como confirmadas).</footer>
+  <footer>Población: personas que completaron "Datos Cita VSL - Founders" (Ads) o "Datos Cita VSL - Founders - IG" (Bio) en el período; si alguien lo completó varias veces, cuenta la última. Etiqueta: la que puso el flujo (no_cualifica, puede_cualificar, cualifica), leída desde sus oportunidades en GHL. Regla del flujo: no cualifica si el modelo es Comercio o Clínicas, o si respondió "No, no puedo invertir en mi…"; posible si es Consultoría o Agencia; el resto cualifica. Agendó = tiene una cita en el calendario de GHL creada después del form. Quien está en Agendas sin etiqueta pasó el filtro (la etiqueta se quita al pasarlo a Agendas) y se ubica por su etapa ahí. Llegó a Slack = hay un aviso en #comercial-agenda con su nombre. Confirmadas = en Nutrición - confirmación (las que siguieron con los closers también cuentan como confirmadas).</footer>
 </div>
 
 <script>
@@ -201,8 +201,7 @@ const COLS=[
 const EXC=[
  {k:"slack",n:"Agendó pero no llegó el aviso a Slack",d:"Tiene cita activa en GHL y no hay aviso en #comercial-agenda. Nadie se enteró.",g:1},
  {k:"cita",n:"El filtro no canceló la cita",d:"Tiene etiqueta no_cualifica pero su cita sigue activa.",g:1},
- {k:"agendas",n:"Agendó y no tiene oportunidad en Agendas",d:"Tomó cita (o llegó a Slack) pero no aparece en el pipeline Agendas.",g:1},
- {k:"sintag",n:"Sin etiqueta del flujo",d:"No tiene ninguna oportunidad con etiqueta: puede que el flujo no haya corrido.",g:2},
+ {k:"sintag",n:"Sin etiqueta del flujo",d:"No tiene etiqueta y no está en Agendas: puede que el flujo no haya corrido.",g:2},
  {k:"tag",n:"Etiqueta distinta a la regla del flujo",d:"La etiqueta que tiene no coincide con la que le corresponde por sus respuestas.",g:2},
  {k:"hueco",n:"Dijo que no puede invertir y el flujo lo dejó pasar",d:"Respondió \"No, ahora mismo no puedo\" u \"Hoy no cuento con dinero\", opción que la regla del flujo no descalifica.",g:2}];
 const SRC={A:"Ads",B:"Bio"}; const SRCCOL={A:"#2563EB",B:"#0D9488"};
@@ -311,7 +310,10 @@ async function load(fresh){
       const ref=l.cita?(l.cita.added||l.cita.start):s.at;
       l.slack=msgT.some(m=>nameIn(l.name,m)&&m.at>=Math.min(ref,s.at)-3600e3&&m.at<=ref+3*DAY);
       l.agendo=!!l.cita||l.slack;
-      const tagEff=l.tag||l.expected;
+      // Sin etiqueta pero en Agendas: pasó el filtro (cualificaba o era posible); manda su etapa en Agendas.
+      l.passed=!l.tag&&!!ag;
+      const tagEff=l.tag||(l.passed?(l.expected==="no_cualifica"?"cualifica":l.expected):l.expected);
+      l.tagEff=tagEff;
       // columna
       const a=norm(l.ag);
       if(tagEff==="no_cualifica") l.col="nc";
@@ -326,8 +328,7 @@ async function load(fresh){
       // excepciones
       if(l.citaActiva&&!l.slack&&tagEff!=="no_cualifica") l.exc.push("slack");
       if(l.tag==="no_cualifica"&&l.citaActiva) l.exc.push("cita");
-      if(l.agendo&&tagEff!=="no_cualifica"&&!ag) l.exc.push("agendas");
-      if(!l.tag) l.exc.push("sintag");
+      if(!l.tag&&!ag) l.exc.push("sintag");
       if(l.tag&&l.tag!==l.expected) l.exc.push("tag");
       if(saidNo(l)&&tagEff!=="no_cualifica") l.exc.push("hueco");
       l.where=ag?"Agendas · "+l.ag:sg?"Seguimientos · "+l.sg:lp?"Leads (Prospección) · "+l.lp:"Sin oportunidad";
@@ -350,7 +351,7 @@ function render(){
   [...document.querySelectorAll("#fSrc .chip")].forEach((b,i)=>b.setAttribute("aria-pressed",["all","A","B"][i]===state.src));
   const L=state.leads.filter(l=>(state.src==="all"||l.src===state.src)&&(!state.q||norm(l.name).includes(state.q)||norm(l.email).includes(state.q)));
   const n=L.length, pct=v=>n?Math.round(v*100/n)+"%":"–";
-  const tagEff=l=>l.tag||l.expected;
+  const tagEff=l=>l.tagEff;
   const f=[["Completaron el form",n],["No cualificaron",L.filter(l=>tagEff(l)==="no_cualifica").length],["Posibles",L.filter(l=>tagEff(l)==="puede_cualificar").length],["Cualificaron",L.filter(l=>tagEff(l)==="cualifica").length],["Agendaron (cita en GHL)",L.filter(l=>l.cita).length],["Llegaron a Slack",L.filter(l=>l.slack).length],["Confirmadas",L.filter(l=>l.col==="co").length]];
   document.getElementById("funnel").innerHTML=f.map(([t,v],i)=>`<div class="fbox"><div class="l">${i?"→ ":""}${t}</div><div class="n num">${v}</div><div class="p">${i?pct(v)+" del total":"personas distintas"}</div></div>`).join("")
     +(state.warn.length?`<div class="warn" style="grid-column:1/-1">Ojo: ${state.warn.map(esc).join(" · ")}</div>`:"");
@@ -362,10 +363,11 @@ function render(){
   document.getElementById("clasif").innerHTML=`<div class="legend" style="margin-top:0">
     <div class="leg" style="cursor:default"><span class="dot" style="background:#16A34A"></span><span class="n num">${ok}</span><span class="l">clasificados según la regla del flujo</span></div>
     <div class="leg" style="cursor:default"><span class="dot" style="background:#DC2626"></span><span class="n num">${withTag.length-ok}</span><span class="l">con una etiqueta distinta a la que corresponde</span></div>
-    <div class="leg" style="cursor:default"><span class="dot" style="background:#6B7280"></span><span class="n num">${n-withTag.length}</span><span class="l">sin etiqueta visible</span></div>
+    <div class="leg" style="cursor:default"><span class="dot" style="background:#6B7280"></span><span class="n num">${L.filter(l=>l.passed).length}</span><span class="l">sin etiqueta pero en Agendas (pasaron el filtro)</span></div>
+    <div class="leg" style="cursor:default"><span class="dot" style="background:#9CA3AF"></span><span class="n num">${L.filter(l=>!l.tag&&!l.passed).length}</span><span class="l">sin etiqueta y fuera de Agendas</span></div>
     <div class="leg" style="cursor:default"><span class="dot" style="background:#B45309"></span><span class="n num">${L.filter(l=>l.exc.includes("hueco")).length}</span><span class="l">dijeron que no pueden invertir y pasaron (hueco de la regla)</span></div></div>`;
   // excepciones
-  document.getElementById("excs").innerHTML=EXC.map(x=>{const items=L.filter(l=>l.exc.includes(x.k));return `<details class="exc"><summary><span class="dot" style="background:${x.g===1?"#DC2626":"#B45309"}"></span><span>${esc(x.n)}<div class="d">${esc(x.d)}</div></span><span class="n">${items.length}</span></summary>${items.length?`<div class="days" style="margin:0 14px 12px"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Origen</th><th>Completó el form</th><th>Etiqueta / regla</th><th>Cita</th><th>Slack</th><th>Dónde está</th></tr></thead><tbody>${items.sort((a,b)=>b.at-a.at).map(l=>`<tr><td>${esc(l.name)}</td><td>${esc(l.email||"–")}</td><td>${SRC[l.src]}</td><td>${dtFmt.format(new Date(l.at))}</td><td>${esc(l.tag||"sin etiqueta")} / ${esc(l.expected)}</td><td>${l.cita?esc(dtFmt.format(new Date(l.cita.start)))+" · "+esc(l.cita.status||"")+"":"–"}</td><td>${l.slack?"Sí":"No"}</td><td>${esc(l.where)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty" style="padding:0 14px 12px">Ningún caso.</div>`}</details>`}).join("");
+  document.getElementById("excs").innerHTML=EXC.map(x=>{const items=L.filter(l=>l.exc.includes(x.k));return `<details class="exc"><summary><span class="dot" style="background:${x.g===1?"#DC2626":"#B45309"}"></span><span>${esc(x.n)}<div class="d">${esc(x.d)}</div></span><span class="n">${items.length}</span></summary>${items.length?`<div class="days" style="margin:0 14px 12px"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Origen</th><th>Completó el form</th><th>Etiqueta / regla</th><th>Cita</th><th>Slack</th><th>Dónde está</th></tr></thead><tbody>${items.sort((a,b)=>b.at-a.at).map(l=>`<tr><td>${esc(l.name)}</td><td>${esc(l.email||"–")}</td><td>${SRC[l.src]}</td><td>${dtFmt.format(new Date(l.at))}</td><td>${esc(l.tag||(l.passed?"sin etiqueta (en Agendas)":"sin etiqueta"))} / ${esc(l.expected)}</td><td>${l.cita?esc(dtFmt.format(new Date(l.cita.start)))+" · "+esc(l.cita.status||"")+"":"–"}</td><td>${l.slack?"Sí":"No"}</td><td>${esc(l.where)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty" style="padding:0 14px 12px">Ningún caso.</div>`}</details>`}).join("");
   // tablero
   document.getElementById("board").innerHTML=COLS.map(c=>{const it=L.filter(l=>l.col===c.k).sort((a,b)=>b.at-a.at);return `<section class="col"><h2><span class="dot" style="background:${c.c}"></span>${c.n}<span class="count num">${it.length}</span></h2><div class="stages">${esc(c.d)}</div>${it.map(l=>`<article class="card" style="--cat:${c.c}"><div class="nm">${esc(l.name)}</div><div class="meta"><span class="tag" style="background:${SRCCOL[l.src]};color:#fff">${SRC[l.src]}</span><span class="tag">${esc(l.where)}</span></div>${l.exc.length?`<div class="warn">${l.exc.map(k=>esc(EXC.find(x=>x.k===k).n)).join(" · ")}</div>`:""}</article>`).join("")||'<div class="empty">Nadie.</div>'}</section>`}).join("");
 }
