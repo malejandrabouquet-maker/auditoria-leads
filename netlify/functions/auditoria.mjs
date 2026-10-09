@@ -152,6 +152,18 @@ async function slack(from, to) {
   return { messages: out };
 }
 
+/* ---------- paso "contactos": etiquetas de contactos sin oportunidad ---------- */
+async function contactos(ids) {
+  const out = {};
+  for (let i = 0; i < ids.length; i += 5) {
+    await Promise.all(ids.slice(i, i + 5).map(async (id) => {
+      try { const j = await ghl(`/contacts/${encodeURIComponent(id)}`, {}); out[id] = j.contact?.tags || []; }
+      catch (e) { out[id] = null; }
+    }));
+  }
+  return { tags: out };
+}
+
 export default async (req) => {
   if (!GHL_TOKEN || !PASSWORD) return json(500, { message: "Faltan variables de entorno en Netlify (GHL_TOKEN o DASHBOARD_PASSWORD)." });
   if (!passOk(req.headers.get("x-pass"))) return json(401, { message: "Contraseña incorrecta." });
@@ -164,6 +176,7 @@ export default async (req) => {
       case "opps": return json(200, await opps(q("pipelineId"), q("stageId"), Number(q("since")) || 0));
       case "citas": if (!isDay(from) || !isDay(to)) break; return json(200, await citas(q("calendarId"), from, to));
       case "slack": if (!isDay(from) || !isDay(to)) break; return json(200, await slack(from, to));
+      case "contactos": return json(200, await contactos(q("ids").split(",").filter(Boolean).slice(0, 25)));
     }
     return json(400, { message: "Pedido inválido." });
   } catch (e) {
