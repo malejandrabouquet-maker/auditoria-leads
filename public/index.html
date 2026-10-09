@@ -162,6 +162,12 @@ footer{color:var(--muted);font-size:12.5px;margin-top:22px;max-width:76ch}
       <input type="search" id="q" placeholder="Buscar por nombre o correo" aria-label="Buscar por nombre o correo">
     </div>
 
+    <section class="summary" aria-label="Qué hacer hoy">
+      <div class="sub0" style="font-size:18px">Qué hacer hoy</div>
+      <div class="funnel" id="todoSum"></div>
+      <div id="todo"></div>
+    </section>
+
     <section class="summary" aria-label="Embudo">
       <div class="sub0">El camino, de punta a punta</div>
       <div class="funnel" id="funnel"></div>
@@ -300,11 +306,14 @@ async function load(fresh){
     for(const o of ops){if(!o.cid)continue;(opsBy.get(o.cid)||opsBy.set(o.cid,[]).get(o.cid)).push(o)}
     for(const e of events){if(!e.cid)continue;(evBy.get(e.cid)||evBy.set(e.cid,[]).get(e.cid)).push(e)}
     // Contactos que no tienen oportunidad en los pipelines: su etiqueta se lee del contacto.
-    const lonely=[...new Set([...byKey.values()].map(s=>s.cid).filter(c=>c&&!opsBy.has(c)))];
+    const TAGS3=["no_cualifica","puede_cualificar","cualifica"];
+    const agId=pAg&&pAg.id;
+    const needTag=c=>{const m=opsBy.get(c)||[];if(m.some(o=>o.pipelineId===agId))return false;return !m.some(o=>o.tags.some(t=>TAGS3.includes(norm(t).replace(/ /g,"_"))))};
+    const lonely=[...new Set([...byKey.values()].map(s=>s.cid).filter(c=>c&&needTag(c)))];
     const ctags={};
     const batches=[];for(let i=0;i<lonely.length;i+=25) batches.push(lonely.slice(i,i+25));
     let bd=0;
-    await pool(batches.map(b=>async()=>{const r=await api({paso:"contactos",ids:b.join(",")}).catch(()=>({tags:{}}));Object.assign(ctags,r.tags);bd++;step(`Leyendo etiquetas de contactos sin oportunidad (${bd} de ${batches.length})`)}),3);
+    await pool(batches.map(b=>async()=>{const r=await api({paso:"contactos",ids:b.join(",")}).catch(()=>({tags:{}}));Object.assign(ctags,r.tags);bd++;step(`Leyendo etiquetas de contactos (${bd} de ${batches.length})`)}),3);
     const msgT=msgs.map(m=>({...m,tk:new Set(toks(m.title))}));
     const nameIn=(name,m)=>{const t=toks(name);if(!t.length) return false;return t.length===1?m.tk.has(t[0]):m.tk.has(t[0])&&m.tk.has(t[t.length-1])};
 
@@ -346,6 +355,21 @@ async function load(fresh){
       if(!ag&&l.tag&&l.tag!==l.expected) l.exc.push("tag");
       if(saidNo(l)&&tagEff!=="no_cualifica") l.exc.push("hueco");
       l.where=ag?"Agendas · "+l.ag:sg?"Seguimientos · "+l.sg:lp?"Leads (Prospección) · "+l.lp:"Sin oportunidad";
+      // ---- conclusión: qué pasó y qué hacer ----
+      const cuando=l.cita?dtFmt.format(new Date(l.cita.start)):"";
+      const lpWorked=lp&&!/^(lead|nuevo|new)/.test(norm(l.lp));
+      const fresh=Date.now()-s.at<=48*3600e3;
+      const nivel=tagEff==="puede_cualificar"?"es posible":"cualifica";
+      if(l.exc.includes("slack")){l.prio="urg";l.que=`Agendó para el ${cuando} y no llegó el aviso a Slack: nadie se enteró.`;l.hacer="Contactarlo hoy y confirmar la cita."}
+      else if(l.exc.includes("cita")){l.prio="urg";l.que=`El form lo descalificó, pero su cita del ${cuando} sigue activa.`;l.hacer="Cancelar la cita o hablar con la persona."}
+      else if(l.exc.includes("hueco")&&l.citaActiva&&!ag){l.prio="hoy";l.que=`Dijo que no puede invertir, el flujo lo dejó pasar y tiene cita el ${cuando}.`;l.hacer="Revisar si puede invertir antes de la llamada."}
+      else if(ag){l.prio="none";l.que=`Agendó y está en tu proceso: ${l.ag.replace(/\s*\|\s*S$/,"")}.`;l.hacer="Seguir el proceso normal."}
+      else if(tagEff==="no_cualifica"){l.prio="none";l.que="El form lo descalificó y quedó en Seguimientos.";l.hacer="Nada."}
+      else if(l.agendo){l.prio="none";l.que=`Agendó${cuando?" para el "+cuando:""}${l.slack?" y llegó el aviso a Slack":""}${l.citaActiva?"":", pero la cita está cancelada"}.`;l.hacer=l.citaActiva?"Esperar la llamada.":"Escribirle para reagendar."; if(!l.citaActiva) l.prio=fresh?"hoy":"rec"}
+      else if(lpWorked){l.prio="none";l.que=`Pasó el filtro (${nivel}) y ya se está trabajando en Leads (Prospección): ${l.lp}.`;l.hacer="Seguir el proceso normal."}
+      else {l.prio=fresh?"hoy":"rec";l.que=`Pasó el filtro (${nivel}) pero no agendó.`;l.hacer=fresh?"Escribirle hoy para que agende.":"Mandarle un mensaje de reactivación para que agende."}
+      const dias=Math.floor((Date.now()-s.at)/DAY);
+      l.desde=dias<=0?"completó el form hoy":dias===1?"completó el form ayer":`completó el form hace ${dias} días`;
       return l;
     });
     state.warn=[slackErr&&("Slack: "+slackErr),citaErr&&("Calendarios: "+citaErr),!pLp&&"No encontré el pipeline Leads (Prospección).",!pSeg&&"No encontré el pipeline Seguimientos."].filter(Boolean);
@@ -372,6 +396,24 @@ function render(){
   const cnt=k=>L.filter(l=>l.col===k).length;
   document.getElementById("bar").innerHTML=COLS.filter(c=>cnt(c.k)).map(c=>`<button type="button" style="flex:${cnt(c.k)};background:${c.c}" title="${esc(c.n)}: ${cnt(c.k)}">${n&&cnt(c.k)*100/n>=6?Math.round(cnt(c.k)*100/n)+"%":""}</button>`).join("");
   document.getElementById("legend").innerHTML=COLS.map(c=>`<div class="leg" style="cursor:default"><span class="dot" style="background:${c.c}"></span><span class="n num">${cnt(c.k)}</span><span class="l">${c.n}</span></div>`).join("");
+  // qué hacer hoy
+  const P=[{k:"urg",n:"🔴 Urgente",d:"Leads que agendaron y nadie atendió, o con una cita que no corresponde.",open:true},
+           {k:"hoy",n:"🟠 Escribir hoy",d:"Pasaron el filtro en las últimas 48 horas y no agendaron (o cancelaron).",open:true},
+           {k:"rec",n:"🟡 Recuperar",d:"Pasaron el filtro hace más de 48 horas y no agendaron.",open:false}];
+  const sys=[["slack","Avisos a Slack que no salieron","Revisar el envío del aviso a #comercial-agenda."],
+             ["hueco","\"No, ahora mismo no puedo\" pasa el filtro","Agregar esa respuesta a la condición de No Cualificados del flujo."],
+             ["sintag","Leads sin etiqueta del flujo","Mirar en los registros de ejecución del flujo si falló el paso de etiqueta."],
+             ["tag","Etiqueta distinta a la regla","Revisar las condiciones del flujo con la tabla de abajo."]].map(([k,n,h])=>({n,h,c:L.filter(l=>l.exc.includes(k)).length})).filter(x=>x.c);
+  const none=L.filter(l=>l.prio==="none");
+  document.getElementById("todoSum").innerHTML=P.map(p=>`<div class="fbox"><div class="l">${p.n}</div><div class="n num">${L.filter(l=>l.prio===p.k).length}</div></div>`).join("")
+    +`<div class="fbox"><div class="l">🛠 Para arreglar en el sistema</div><div class="n num">${sys.length}</div></div><div class="fbox"><div class="l">✅ Sin acción</div><div class="n num">${none.length}</div></div>`;
+  const item=l=>`<div class="card" style="--cat:${l.prio==="urg"?"#DC2626":l.prio==="hoy"?"#E5940B":l.prio==="rec"?"#CA8A04":"#16A34A"};margin:0 0 8px">
+      <div class="nm">${esc(l.name)} <span class="tag" style="background:${SRCCOL[l.src]};color:#fff;margin-left:4px">${SRC[l.src]}</span> <span style="color:var(--muted);font-weight:400;font-size:12.5px">· ${esc(l.desde)}${l.email?" · "+esc(l.email):""}</span></div>
+      <div style="font-size:13.5px;margin-top:4px"><b>Qué pasó:</b> ${esc(l.que)}</div>
+      <div style="font-size:13.5px"><b>Qué hacer:</b> ${esc(l.hacer)}</div></div>`;
+  document.getElementById("todo").innerHTML=P.map(p=>{const it=L.filter(l=>l.prio===p.k).sort((a,b)=>b.at-a.at);return `<details class="exc" ${p.open&&it.length?"open":""}><summary><span>${p.n}<div class="d">${p.d}</div></span><span class="n">${it.length}</span></summary><div style="padding:0 14px 12px;max-height:520px;overflow-y:auto">${it.map(item).join("")||'<div class="empty">Nada por acá.</div>'}</div></details>`}).join("")
+    +`<details class="exc"><summary><span>🛠 Para arreglar en el sistema<div class="d">No se resuelven lead por lead: se arreglan una vez en GHL o en el flujo.</div></span><span class="n">${sys.length}</span></summary><div style="padding:0 14px 12px">${sys.map(x=>`<div style="margin:6px 0"><b>${esc(x.n)} (${x.c})</b><br><span style="color:var(--muted);font-size:13.5px">${esc(x.h)}</span></div>`).join("")||'<div class="empty">Nada por arreglar.</div>'}</div></details>`
+    +`<details class="exc"><summary><span>✅ Sin acción<div class="d">Descalificados por el form, en tu proceso, ya trabajándose o esperando la llamada.</div></span><span class="n">${none.length}</span></summary><div style="padding:0 14px 12px;max-height:520px;overflow-y:auto">${none.sort((a,b)=>b.at-a.at).map(item).join("")}</div></details>`;
   // clasificación
   const withTag=L.filter(l=>l.tag&&!l.inAg), ok=withTag.filter(l=>l.tag===l.expected).length;
   document.getElementById("clasif").innerHTML=`<div class="legend" style="margin-top:0">
