@@ -66,7 +66,7 @@ async function meta() {
 async function form(formId, from, to) {
   const out = [];
   for (let page = 1; page <= 40; page++) {
-    const j = await ghl("/forms/submissions", { locationId: GHL_LOCATION, formId, startAt: from, endAt: to, limit: 100, page });
+    const j = await ghl("/forms/submissions", { locationId: GHL_LOCATION, formId, startAt: from, endAt: new Date(dayStart(to) + 2 * DAY).toISOString().slice(0, 10), limit: 100, page });
     const items = j.submissions || [];
     for (const s of items) {
       const o = s.others || {};
@@ -86,7 +86,7 @@ async function form(formId, from, to) {
     }
     if (items.length < 100 || !j.meta?.nextPage) break;
   }
-  return { submissions: out };
+  return { submissions: out.filter((s) => !s.at || s.at < dayStart(to) + DAY) };
 }
 
 /* ---------- paso "opps": oportunidades de una etapa ---------- */
