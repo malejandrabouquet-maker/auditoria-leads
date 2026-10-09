@@ -132,7 +132,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:22px;max-width:76ch}
 .exc summary{cursor:pointer;padding:10px 14px;display:flex;gap:10px;align-items:center;font-weight:600;font-size:14.5px}
 .exc summary .n{margin-left:auto;font-variant-numeric:tabular-nums}
 .exc .d{color:var(--muted);font-size:12.5px;font-weight:400}
-.exc table{min-width:620px}
+.exc table{min-width:900px}
 .exc td,.exc th{text-align:left;white-space:normal}
 .warn{color:var(--c-per);font-size:12px;margin-top:6px;line-height:1.3}
 </style>
@@ -173,6 +173,12 @@ footer{color:var(--muted);font-size:12.5px;margin-top:22px;max-width:76ch}
     <section class="summary" aria-label="Clasificación del flujo">
       <div class="sub0">¿El flujo "Autorespondedor VSL" clasificó bien?</div>
       <div id="clasif"></div>
+    </section>
+
+    <section class="summary" aria-label="Cómo clasificó el flujo en la práctica">
+      <div class="sub0">Cómo clasificó el flujo en la práctica</div>
+      <div class="snap">Para cada respuesta del form, qué etiqueta terminó poniendo el flujo. Solo cuenta a quienes no están en Agendas y tienen etiqueta. Sirve para ver la regla real.</div>
+      <div id="practica"></div>
     </section>
 
     <section class="summary" aria-label="Excepciones">
@@ -248,6 +254,7 @@ async function pool(tasks,n){const out=new Array(tasks.length);let i=0;async fun
 function answer(list,prefixes){for(const a of list){const n=norm(a);for(const p of prefixes) if(n.startsWith(norm(p))) return a}return ""}
 const MODELOS=["Salud o bienestar","Comercio","Coaching","Enseñanza","Marca personal","Agencia","Consultoría","Clínicas"];
 const INVS=["No, ","Si,","Sí,","Hoy no cuento","Tengo "];
+const INGS=["Todavía no facturo","Menos de $","Entre $","Más de $"];
 function regla(l){
   const m=norm(l.modelo), v=norm(l.inv);
   if(m.startsWith("comercio")||m.startsWith("clinicas")||v.startsWith("no no puedo invertir en mi")) return "no_cualifica";
@@ -292,15 +299,21 @@ async function load(fresh){
     const opsBy=new Map(), evBy=new Map();
     for(const o of ops){if(!o.cid)continue;(opsBy.get(o.cid)||opsBy.set(o.cid,[]).get(o.cid)).push(o)}
     for(const e of events){if(!e.cid)continue;(evBy.get(e.cid)||evBy.set(e.cid,[]).get(e.cid)).push(e)}
+    // Contactos que no tienen oportunidad en los pipelines: su etiqueta se lee del contacto.
+    const lonely=[...new Set([...byKey.values()].map(s=>s.cid).filter(c=>c&&!opsBy.has(c)))];
+    const ctags={};
+    const batches=[];for(let i=0;i<lonely.length;i+=25) batches.push(lonely.slice(i,i+25));
+    let bd=0;
+    await pool(batches.map(b=>async()=>{const r=await api({paso:"contactos",ids:b.join(",")}).catch(()=>({tags:{}}));Object.assign(ctags,r.tags);bd++;step(`Leyendo etiquetas de contactos sin oportunidad (${bd} de ${batches.length})`)}),3);
     const msgT=msgs.map(m=>({...m,tk:new Set(toks(m.title))}));
     const nameIn=(name,m)=>{const t=toks(name);if(!t.length) return false;return t.length===1?m.tk.has(t[0]):m.tk.has(t[0])&&m.tk.has(t[t.length-1])};
 
     state.leads=[...byKey.values()].map(s=>{
       const l={name:s.name||"(sin nombre)",email:s.email,src:s.src,at:s.at,cid:s.cid,
-        modelo:answer(s.answers,MODELOS),inv:answer(s.answers,INVS),exc:[]};
+        modelo:answer(s.answers,MODELOS),inv:answer(s.answers,INVS),ing:answer(s.answers,INGS),exc:[]};
       l.expected=regla(l);
       const mine=(opsBy.get(s.cid)||[]);
-      const tags=new Set(mine.flatMap(o=>o.tags.map(x=>norm(x).replace(/ /g,"_"))));
+      const tags=new Set([...mine.flatMap(o=>o.tags),...(ctags[s.cid]||[])].map(x=>norm(x).replace(/ /g,"_")));
       l.tag=tags.has("no_cualifica")?"no_cualifica":tags.has("puede_cualificar")?"puede_cualificar":tags.has("cualifica")?"cualifica":"";
       const latest=(pid)=>mine.filter(o=>o.pipelineId===pid).sort((a,b)=>b.changed-a.changed)[0];
       const ag=pAg&&latest(pAg.id), lp=pLp&&latest(pLp.id), sg=pSeg&&latest(pSeg.id);
@@ -367,8 +380,14 @@ function render(){
     <div class="leg" style="cursor:default"><span class="dot" style="background:#6B7280"></span><span class="n num">${L.filter(l=>l.inAg).length}</span><span class="l">en Agendas (pasaron el filtro; manda su etapa ahí)</span></div>
     <div class="leg" style="cursor:default"><span class="dot" style="background:#9CA3AF"></span><span class="n num">${L.filter(l=>!l.tag&&!l.passed).length}</span><span class="l">sin etiqueta y fuera de Agendas</span></div>
     <div class="leg" style="cursor:default"><span class="dot" style="background:#B45309"></span><span class="n num">${L.filter(l=>l.exc.includes("hueco")).length}</span><span class="l">dijeron que no pueden invertir y pasaron (hueco de la regla)</span></div></div>`;
+  // práctica
+  const base=L.filter(l=>l.tag&&!l.inAg);
+  const tbl=(title,key)=>{const vals=[...new Set(base.map(l=>l[key]||"(sin responder)"))];
+    const rows=vals.map(v=>{const g=base.filter(l=>(l[key]||"(sin responder)")===v);const c=t=>g.filter(l=>l.tag===t).length;return {v,n:g.length,nc:c("no_cualifica"),po:c("puede_cualificar"),cu:c("cualifica")}}).sort((a,b)=>b.n-a.n);
+    return `<div class="days"><table><thead><tr><th>${title}</th><th>Total</th><th>no_cualifica</th><th>puede_cualificar</th><th>cualifica</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="text-align:left;white-space:normal">${esc(r.v)}</td><td class="num">${r.n}</td><td class="num">${r.nc||"–"}</td><td class="num">${r.po||"–"}</td><td class="num">${r.cu||"–"}</td></tr>`).join("")}</tbody></table></div>`};
+  document.getElementById("practica").innerHTML=tbl("Modelo de negocio","modelo")+tbl("Nivel de ingresos","ing")+tbl("¿Puede invertir?","inv");
   // excepciones
-  document.getElementById("excs").innerHTML=EXC.map(x=>{const items=L.filter(l=>l.exc.includes(x.k));return `<details class="exc"><summary><span class="dot" style="background:${x.g===1?"#DC2626":"#B45309"}"></span><span>${esc(x.n)}<div class="d">${esc(x.d)}</div></span><span class="n">${items.length}</span></summary>${items.length?`<div class="days" style="margin:0 14px 12px"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Origen</th><th>Completó el form</th><th>Etiqueta / regla</th><th>Cita</th><th>Slack</th><th>Dónde está</th></tr></thead><tbody>${items.sort((a,b)=>b.at-a.at).map(l=>`<tr><td>${esc(l.name)}</td><td>${esc(l.email||"–")}</td><td>${SRC[l.src]}</td><td>${dtFmt.format(new Date(l.at))}</td><td>${esc(l.tag||(l.passed?"sin etiqueta (en Agendas)":"sin etiqueta"))} / ${esc(l.expected)}</td><td>${l.cita?esc(dtFmt.format(new Date(l.cita.start)))+" · "+esc(l.cita.status||"")+"":"–"}</td><td>${l.slack?"Sí":"No"}</td><td>${esc(l.where)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty" style="padding:0 14px 12px">Ningún caso.</div>`}</details>`}).join("");
+  document.getElementById("excs").innerHTML=EXC.map(x=>{const items=L.filter(l=>l.exc.includes(x.k));return `<details class="exc"><summary><span class="dot" style="background:${x.g===1?"#DC2626":"#B45309"}"></span><span>${esc(x.n)}<div class="d">${esc(x.d)}</div></span><span class="n">${items.length}</span></summary>${items.length?`<div class="days" style="margin:0 14px 12px"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Origen</th><th>Completó el form</th><th>Etiqueta / regla</th><th>Respuestas del form</th><th>Cita</th><th>Slack</th><th>Dónde está</th></tr></thead><tbody>${items.sort((a,b)=>b.at-a.at).map(l=>`<tr><td>${esc(l.name)}</td><td>${esc(l.email||"–")}</td><td>${SRC[l.src]}</td><td>${dtFmt.format(new Date(l.at))}</td><td>${esc(l.tag||(l.passed?"sin etiqueta (en Agendas)":"sin etiqueta"))} / ${esc(l.expected)}</td><td style="font-size:12.5px;color:var(--muted)">${esc([l.modelo,l.ing,l.inv].filter(Boolean).join(" · ")||"–")}</td><td>${l.cita?esc(dtFmt.format(new Date(l.cita.start)))+" · "+esc(l.cita.status||"")+"":"–"}</td><td>${l.slack?"Sí":"No"}</td><td>${esc(l.where)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty" style="padding:0 14px 12px">Ningún caso.</div>`}</details>`}).join("");
   // tablero
   document.getElementById("board").innerHTML=COLS.map(c=>{const it=L.filter(l=>l.col===c.k).sort((a,b)=>b.at-a.at);return `<section class="col"><h2><span class="dot" style="background:${c.c}"></span>${c.n}<span class="count num">${it.length}</span></h2><div class="stages">${esc(c.d)}</div>${it.map(l=>`<article class="card" style="--cat:${c.c}"><div class="nm">${esc(l.name)}</div><div class="meta"><span class="tag" style="background:${SRCCOL[l.src]};color:#fff">${SRC[l.src]}</span><span class="tag">${esc(l.where)}</span></div>${l.exc.length?`<div class="warn">${l.exc.map(k=>esc(EXC.find(x=>x.k===k).n)).join(" · ")}</div>`:""}</article>`).join("")||'<div class="empty">Nadie.</div>'}</section>`}).join("");
 }
