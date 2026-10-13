@@ -203,7 +203,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:22px;max-width:76ch}
     <div class="cols" id="board"></div>
   </div>
 
-  <footer>Población: personas que completaron "Datos Cita VSL - Founders" (Ads) o "Datos Cita VSL - Founders - IG" (Bio) en el período; si alguien lo completó varias veces, cuenta la última. Etiqueta: la que puso el flujo (no_cualifica, puede_cualificar, cualifica), leída desde sus oportunidades en GHL. Regla del flujo: no cualifica si el modelo es Comercio o Clínicas, o si respondió "No, no puedo invertir en mi…"; posible si es Consultoría o Agencia; el resto cualifica. Agendó = tiene una cita en el calendario de GHL creada después del form. Quien está en Agendas sin etiqueta pasó el filtro (la etiqueta se quita al pasarlo a Agendas) y se ubica por su etapa ahí. Llegó a Slack = hay un aviso en #comercial-agenda con su nombre. Confirmadas = en Nutrición - confirmación (las que siguieron con los closers también cuentan como confirmadas).</footer>
+  <footer>Población: personas que completaron "Datos Cita VSL - Founders" (Ads) o "Datos Cita VSL - Founders - IG" (Bio) en el período; si alguien lo completó varias veces, cuenta la última. Etiqueta: la que puso el flujo (no_cualifica, puede_cualificar, cualifica), leída desde sus oportunidades en GHL. Regla: no cualifica si el modelo es Comercio o Clínicas, o si respondió que no puede invertir ("No, no puedo invertir…", "No, ahora mismo no puedo" o "Hoy no cuento con dinero…"); posible si es Consultoría o Agencia; el resto cualifica. Si el lead no agendó, el flujo no corre: su clasificación sale de sus respuestas. Agendó = tiene una cita en el calendario de GHL creada después del form. Quien está en Agendas sin etiqueta pasó el filtro (la etiqueta se quita al pasarlo a Agendas) y se ubica por su etapa ahí. Llegó a Slack = hay un aviso en #comercial-agenda con su nombre. Confirmadas = en Nutrición - confirmación (las que siguieron con los closers también cuentan como confirmadas).</footer>
 </div>
 
 <script>
@@ -218,10 +218,11 @@ const COLS=[
  {k:"pe",n:"Perdidas tras agendar",d:"Descalificadas o canceladas en Agendas",c:"#78716C"}];
 const EXC=[
  {k:"slack",n:"Agendó pero no llegó el aviso a Slack",d:"Tiene cita activa en GHL y no hay aviso en #comercial-agenda. Nadie se enteró.",g:1},
+ {k:"maldesc",n:"Respondió bien pero quedó descalificado",d:"Sus respuestas cualifican, pero tiene no_cualifica y no está en Agendas. Puede ser un lead bueno que se está perdiendo.",g:1},
  {k:"cita",n:"El filtro no canceló la cita",d:"Tiene etiqueta no_cualifica pero su cita sigue activa.",g:1},
- {k:"sintag",n:"Sin etiqueta del flujo",d:"No tiene etiqueta y no está en Agendas: puede que el flujo no haya corrido.",g:2},
- {k:"hueco",n:"Dijo que no puede invertir y el flujo lo dejó pasar",d:"Respondió \"No, ahora mismo no puedo\" u \"Hoy no cuento con dinero\", opción que la regla del flujo no descalifica.",g:2}];
-const PROB={slack:"No llegó el aviso a Slack",cita:"El filtro no canceló la cita",sintag:"Sin etiqueta del flujo",tag:"Etiqueta distinta a la regla del flujo",hueco:"Dijo que no puede invertir y pasó"};
+ {k:"sintag",n:"Agendó y no tiene etiqueta del flujo",d:"Tomó cita pero no tiene etiqueta y no está en Agendas: puede que el flujo no haya corrido.",g:2},
+ {k:"hueco",n:"Dijo que no puede invertir y el flujo lo dejó pasar",d:"Respondió que no puede invertir (\"No, ahora mismo no puedo\", \"Hoy no cuento con dinero…\", etc.) y aun así quedó como cualifica o posible.",g:2}];
+const PROB={maldesc:"Respondió bien pero quedó descalificado",slack:"No llegó el aviso a Slack",cita:"El filtro no canceló la cita",sintag:"Sin etiqueta del flujo",tag:"Etiqueta distinta a la regla del flujo",hueco:"Dijo que no puede invertir y pasó"};
 const SRC={A:"Ads",B:"Bio"}; const SRCCOL={A:"#2563EB",B:"#0D9488"};
 const TAGLBL={no_cualifica:"no_cualifica",puede_cualificar:"puede_cualificar",cualifica:"cualifica"};
 
@@ -271,11 +272,12 @@ const INVS=["No, ","Si,","Sí,","Hoy no cuento","Tengo "];
 const INGS=["Todavía no facturo","Menos de $","Entre $","Más de $"];
 function regla(l){
   const m=norm(l.modelo), v=norm(l.inv);
-  if(m.startsWith("comercio")||m.startsWith("clinicas")||v.startsWith("no no puedo invertir en mi")) return "no_cualifica";
+  if(m.startsWith("comercio")||m.startsWith("clinicas")||saidNo(l)) return "no_cualifica";
   if(m.startsWith("consultoria")||m.startsWith("agencia")) return "puede_cualificar";
   return "cualifica";
 }
-const saidNo=l=>{const v=norm(l.inv);return v.startsWith("no ahora mismo no puedo")||v.startsWith("hoy no cuento con dinero")};
+// Cualquier respuesta que diga que no puede invertir (Ads y Bio usan textos distintos).
+const saidNo=l=>{const v=norm(l.inv);return v.startsWith("no no puedo invertir")||v.startsWith("no ahora mismo no puedo")||v.startsWith("hoy no cuento con dinero")};
 
 /* ---------- carga y cruce ---------- */
 async function load(fresh){
@@ -359,9 +361,12 @@ async function load(fresh){
       // excepciones
       if(l.citaActiva&&!l.slack&&tagEff!=="no_cualifica") l.exc.push("slack");
       if(!ag&&l.tag==="no_cualifica"&&l.citaActiva) l.exc.push("cita");
-      if(!l.tag&&!ag) l.exc.push("sintag");
-      if(!ag&&l.tag&&l.tag!==l.expected) l.exc.push("tag");
+      // Respuestas que cualifican (o posibles) pero quedó como no_cualifica. Se excluye a quien dijo que no puede invertir.
+      if(!ag&&l.tag==="no_cualifica"&&l.expected!=="no_cualifica"&&!saidNo(l)) l.exc.push("maldesc");
+      // Sin etiqueta solo es un problema si agendó (el flujo corre al agendar).
+      if(!l.tag&&!ag&&l.agendo) l.exc.push("sintag");
       if(saidNo(l)&&tagEff!=="no_cualifica") l.exc.push("hueco");
+      if(!ag&&l.tag&&l.tag!==l.expected&&!l.exc.includes("maldesc")&&!l.exc.includes("hueco")) l.exc.push("tag");
       l.where=ag?"Agendas · "+l.ag:sg?"Seguimientos · "+l.sg:lp?"Leads (Prospección) · "+l.lp:"Sin oportunidad";
       // ---- conclusión: qué pasó y qué hacer ----
       const cuando=l.cita?dtFmt.format(new Date(l.cita.start)):"";
@@ -371,17 +376,19 @@ async function load(fresh){
       const worked=!!ag||lpWorked;
       if(l.exc.includes("slack")&&worked){l.prio="none";l.que=`Agendó para el ${cuando}. No llegó el aviso a Slack, pero ya se está trabajando (${l.where}).`;l.hacer="Seguir el proceso normal. La falla del aviso queda en \"Para arreglar en el sistema\"."}
       else if(l.exc.includes("slack")){l.prio="urg";l.que=`Agendó para el ${cuando} y no llegó el aviso a Slack: nadie se enteró.`;l.hacer="Contactarlo hoy y confirmar la cita."}
+      else if(l.exc.includes("maldesc")&&!worked){l.prio="urg";l.que=`Sus respuestas ${l.expected==="puede_cualificar"?"lo dejan como posible":"cualifican"} (${[l.modelo,l.inv].filter(Boolean).join(" · ")}), pero quedó como no_cualifica (${l.where}).`;l.hacer="Revisarlo en GHL y contactarlo para reagendar."}
       else if(l.exc.includes("cita")){l.prio="urg";l.que=`El form lo descalificó, pero su cita del ${cuando} sigue activa.`;l.hacer="Cancelar la cita o hablar con la persona."}
       else if(l.exc.includes("hueco")&&l.citaActiva&&!ag){l.prio="hoy";l.que=`Dijo que no puede invertir, el flujo lo dejó pasar y tiene cita el ${cuando}.`;l.hacer="Revisar si puede invertir antes de la llamada."}
       else if(ag){l.prio="none";l.que=`Agendó y está en tu proceso: ${l.ag.replace(/\s*\|\s*S$/,"")}.`;l.hacer="Seguir el proceso normal."}
-      else if(tagEff==="no_cualifica"){l.prio="none";l.que="El form lo descalificó y quedó en Seguimientos.";l.hacer="Nada."}
+      else if(tagEff==="no_cualifica"){l.prio="none";l.que=l.tag?`El flujo lo descalificó (${l.where}).`:`Según sus respuestas no cualifica (${saidNo(l)?"dijo que no puede invertir":"nicho sin fit"}) y no agendó (${l.where}).`;l.hacer="Nada."}
       else if(l.agendo){l.prio="none";l.que=`Agendó${cuando?" para el "+cuando:""}${l.slack?" y llegó el aviso a Slack":""}${l.citaActiva?"":", pero la cita está cancelada"}.`;l.hacer=l.citaActiva?"Esperar la llamada.":"Escribirle para reagendar."; if(!l.citaActiva) l.prio=fresh?"hoy":"rec"}
-      else if(lpWorked){l.prio="none";l.que=`Pasó el filtro (${nivel}) y ya se está trabajando en Leads (Prospección): ${l.lp}.`;l.hacer="Seguir el proceso normal."}
-      else {l.prio=fresh?"hoy":"rec";l.que=`Pasó el filtro (${nivel}) pero no agendó.`;l.hacer=fresh?"Escribirle hoy para que agende.":"Mandarle un mensaje de reactivación para que agende."}
+      else if(saidNo(l)){l.prio="none";l.que=`Dijo que no puede invertir ("${l.inv}") y no agendó${l.tag?", aunque el flujo lo dejó como "+l.tag:""} (${l.where}).`;l.hacer="Nada. Si el flujo lo dejó pasar, queda en \"Para arreglar en el sistema\"."}
+      else if(lpWorked){l.prio="none";l.que=`${l.tag?"Pasó el filtro":"Según sus respuestas"} ${l.tag?"("+nivel+")":nivel} y ya se está trabajando en Leads (Prospección): ${l.lp}.`;l.hacer="Seguir el proceso normal."}
+      else {l.prio=fresh?"hoy":"rec";l.que=l.tag?`Pasó el filtro (${nivel}) pero no agendó.`:`Según sus respuestas ${nivel}, pero no agendó (el flujo no corrió porque no tomó cita).`;l.hacer=fresh?"Escribirle hoy para que agende.":"Mandarle un mensaje de reactivación para que agende."}
       // Alertas solo lo pendiente; lo resuelto pasa al histórico.
       // Mover al lead de etapa es manual (solo se hace después de hablar con él), así que "trabajado" = resuelto.
       const probs=l.exc;
-      l.exc=probs.filter(k=>k!=="tag"&&!(worked&&["slack","cita","hueco","sintag"].includes(k)));
+      l.exc=probs.filter(k=>k!=="tag"&&!(worked&&["slack","cita","hueco","sintag","maldesc"].includes(k)));
       l.hist=probs.filter(k=>!l.exc.includes(k));
       const dias=Math.floor((Date.now()-s.at)/DAY);
       l.desde=dias<=0?"completó el form hoy":dias===1?"completó el form ayer":`completó el form hace ${dias} días`;
@@ -412,12 +419,13 @@ function render(){
   document.getElementById("bar").innerHTML=COLS.filter(c=>cnt(c.k)).map(c=>`<button type="button" style="flex:${cnt(c.k)};background:${c.c}" title="${esc(c.n)}: ${cnt(c.k)}">${n&&cnt(c.k)*100/n>=6?Math.round(cnt(c.k)*100/n)+"%":""}</button>`).join("");
   document.getElementById("legend").innerHTML=COLS.map(c=>`<div class="leg" style="cursor:default"><span class="dot" style="background:${c.c}"></span><span class="n num">${cnt(c.k)}</span><span class="l">${c.n}</span></div>`).join("");
   // qué hacer hoy
-  const P=[{k:"urg",n:"🔴 Urgente",d:"Leads que agendaron y nadie atendió, o con una cita que no corresponde.",open:true},
+  const P=[{k:"urg",n:"🔴 Urgente",d:"Leads que agendaron y nadie atendió, que respondieron bien y quedaron descalificados, o con una cita que no corresponde.",open:true},
            {k:"hoy",n:"🟠 Escribir hoy",d:"Pasaron el filtro en las últimas 48 horas y no agendaron (o cancelaron).",open:true},
            {k:"rec",n:"🟡 Recuperar",d:"Pasaron el filtro hace más de 48 horas y no agendaron.",open:false}];
-  const sys=[["slack","Avisos a Slack que no salieron","Revisar el envío del aviso a #comercial-agenda."],
+  const sys=[["maldesc","Leads que respondieron bien y quedaron como no_cualifica","Revisar en los registros de ejecución del flujo por qué rama los mandó (por ejemplo, si hay opciones nuevas del form que el flujo no reconoce)."],
+             ["slack","Avisos a Slack que no salieron","Revisar el envío del aviso a #comercial-agenda."],
              ["hueco","\"No, ahora mismo no puedo\" pasa el filtro","Agregar esa respuesta a la condición de No Cualificados del flujo."],
-             ["sintag","Leads sin etiqueta del flujo","Mirar en los registros de ejecución del flujo si falló el paso de etiqueta."],
+             ["sintag","Leads que agendaron y no tienen etiqueta del flujo","Mirar en los registros de ejecución del flujo si falló el paso de etiqueta."],
              ["tag","Etiqueta distinta a la regla","Revisar las condiciones del flujo con la tabla de abajo."]].map(([k,n,h])=>({n,h,c:L.filter(l=>l.exc.includes(k)||l.hist.includes(k)).length})).filter(x=>x.c);
   const none=L.filter(l=>l.prio==="none");
   document.getElementById("todoSum").innerHTML=P.map(p=>`<div class="fbox"><div class="l">${p.n}</div><div class="n num">${L.filter(l=>l.prio===p.k).length}</div></div>`).join("")
