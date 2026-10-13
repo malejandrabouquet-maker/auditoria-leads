@@ -157,8 +157,8 @@ async function contactos(ids) {
   const out = {};
   for (let i = 0; i < ids.length; i += 5) {
     await Promise.all(ids.slice(i, i + 5).map(async (id) => {
-      try { const j = await ghl(`/contacts/${encodeURIComponent(id)}`, {}); out[id] = j.contact?.tags || []; }
-      catch (e) { out[id] = null; }
+      try { const j = await ghl(`/contacts/${encodeURIComponent(id)}`, {}); out[id] = j.contact ? (j.contact.tags || []) : "__borrado__"; }
+      catch (e) { out[id] = e?.code === "http_404" || e?.code === "http_400" ? "__borrado__" : null; } // borrado del CRM vs. error temporal
     }));
   }
   return { tags: out };
