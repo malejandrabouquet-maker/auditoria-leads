@@ -203,7 +203,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:22px;max-width:76ch}
     <div class="cols" id="board"></div>
   </div>
 
-  <footer>Población: personas que completaron "Datos Cita VSL - Founders" (Ads) o "Datos Cita VSL - Founders - IG" (Bio) en el período; si alguien lo completó varias veces, cuenta la última. Etiqueta: la que puso el flujo (no_cualifica, puede_cualificar, cualifica), leída desde sus oportunidades en GHL. Regla: no cualifica si el modelo es Comercio o Clínicas, o si respondió que no puede invertir ("No, no puedo invertir…", "No, ahora mismo no puedo" o "Hoy no cuento con dinero…"); posible si es Consultoría o Agencia; el resto cualifica. Si el lead no agendó, el flujo no corre: su clasificación sale de sus respuestas. Agendó = tiene una cita en el calendario de GHL creada después del form. Quien está en Agendas sin etiqueta pasó el filtro (la etiqueta se quita al pasarlo a Agendas) y se ubica por su etapa ahí. Llegó a Slack = hay un aviso en #comercial-agenda con su nombre. Confirmadas = en Nutrición - confirmación (las que siguieron con los closers también cuentan como confirmadas).</footer>
+  <footer>Población (sin envíos de prueba ni contactos borrados del CRM): personas que completaron "Datos Cita VSL - Founders" (Ads) o "Datos Cita VSL - Founders - IG" (Bio) en el período; si alguien lo completó varias veces, cuenta la última. Etiqueta: la que puso el flujo (no_cualifica, puede_cualificar, cualifica), leída desde sus oportunidades en GHL. Regla: no cualifica si el modelo es Comercio o Clínicas, o si respondió que no puede invertir ("No, no puedo invertir…", "No, ahora mismo no puedo" o "Hoy no cuento con dinero…"); posible si es Consultoría o Agencia; el resto cualifica. Si el lead no agendó, el flujo no corre: su clasificación sale de sus respuestas. Agendó = tiene una cita en el calendario de GHL creada después del form. Quien está en Agendas sin etiqueta pasó el filtro (la etiqueta se quita al pasarlo a Agendas) y se ubica por su etapa ahí. Llegó a Slack = hay un aviso en #comercial-agenda con su nombre. Confirmadas = en Nutrición - confirmación (las que siguieron con los closers también cuentan como confirmadas).</footer>
 </div>
 
 <script>
@@ -324,6 +324,9 @@ async function load(fresh){
     const batches=[];for(let i=0;i<lonely.length;i+=25) batches.push(lonely.slice(i,i+25));
     let bd=0;
     await pool(batches.map(b=>async()=>{const r=await api({paso:"contactos",ids:b.join(",")}).catch(()=>({tags:{}}));Object.assign(ctags,r.tags);bd++;step(`Leyendo etiquetas de contactos (${bd} de ${batches.length})`)}),3);
+    // Se excluyen los contactos que ya no existen en el CRM y los envíos de prueba.
+    const esPrueba=s=>/\b(prueba|test)\b/.test(norm(s.name))||/@foundersbs\.com$/i.test(s.email||"");
+    for(const [k,s] of [...byKey]) if(ctags[s.cid]==="__borrado__"||esPrueba(s)) byKey.delete(k);
     const msgT=msgs.map(m=>({...m,tk:new Set(toks(m.title))}));
     const nameIn=(name,m)=>{const t=toks(name);if(!t.length) return false;return t.length===1?m.tk.has(t[0]):m.tk.has(t[0])&&m.tk.has(t[t.length-1])};
 
@@ -332,7 +335,7 @@ async function load(fresh){
         modelo:answer(s.answers,MODELOS),inv:answer(s.answers,INVS),ing:answer(s.answers,INGS),exc:[]};
       l.expected=regla(l);
       const mine=(opsBy.get(s.cid)||[]);
-      const tags=new Set([...mine.flatMap(o=>o.tags),...(ctags[s.cid]||[])].map(x=>norm(x).replace(/ /g,"_")));
+      const tags=new Set([...mine.flatMap(o=>o.tags),...(Array.isArray(ctags[s.cid])?ctags[s.cid]:[])].map(x=>norm(x).replace(/ /g,"_")));
       l.tag=tags.has("no_cualifica")?"no_cualifica":tags.has("puede_cualificar")?"puede_cualificar":tags.has("cualifica")?"cualifica":"";
       const latest=(pid)=>mine.filter(o=>o.pipelineId===pid).sort((a,b)=>b.changed-a.changed)[0];
       const ag=pAg&&latest(pAg.id), lp=pLp&&latest(pLp.id), sg=pSeg&&latest(pSeg.id);
