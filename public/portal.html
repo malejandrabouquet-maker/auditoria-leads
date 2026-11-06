@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portal de setteo · Founders</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#EEF1F5;--panel:#FFFFFF;--ink:#17202E;--muted:#5E6B7E;--line:#D9DFE8;--col:#E3E8EF;
+  --ok:#1E8E5A;--wait:#B7791F;--miss:#C53030;--accent:#2B5CAB;--auto:#7A8597}
+@media (prefers-color-scheme: dark){:root{--bg:#141922;--panel:#1D2430;--ink:#E6EBF2;--muted:#94A1B4;--line:#2E3746;--col:#232B38;
+  --ok:#3CB37A;--wait:#E0A43A;--miss:#F06262;--accent:#6E9BE6;--auto:#8C97A8}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14.5px/1.45 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding:16px 20px 10px}
+h1{font-size:21px;margin:0;font-weight:700}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{border:0;background:none;color:var(--muted);font:inherit;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer}
+nav button[aria-current="true"]{background:var(--panel);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+nav button:disabled{opacity:.45;cursor:default}
+.bar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:0 20px 12px}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:none;color:var(--ink);font:inherit;padding:6px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+input[type=search],input[type=password]{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:9px;padding:7px 11px;font:inherit;min-width:220px}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:9px;padding:7px 13px;font:inherit;font-weight:600;cursor:pointer}
+.btn.main{background:var(--accent);border-color:var(--accent);color:#fff}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.status{margin:0 20px 12px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.status.err{border-color:var(--miss)}
+.hidden{display:none!important}
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(250px,280px);gap:10px;overflow-x:auto;padding:0 20px 20px;align-items:start}
+.col{background:var(--col);border-radius:10px;max-height:calc(100vh - 170px);overflow-y:auto;overscroll-behavior:contain}
+.col h2{position:sticky;top:0;background:var(--col);margin:0;padding:10px 12px 8px;font-size:13.5px;font-weight:700;display:flex;gap:8px;align-items:baseline;z-index:1}
+.col h2 .n{margin-left:auto;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
+.cards{padding:0 8px 8px}
+.card{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin-bottom:6px;color:inherit;font:inherit;cursor:pointer}
+.card:hover{border-color:var(--accent)}
+.card .nm{font-weight:600;line-height:1.25}
+.card .sub{color:var(--muted);font-size:12.5px;margin-top:3px}
+.more{width:100%;margin:2px 0 6px}
+.empty{color:var(--muted);font-size:13px;padding:6px 4px 10px}
+/* Ficha del lead */
+.drawer{position:fixed;inset:0 0 0 auto;width:min(620px,100%);background:var(--panel);border-left:1px solid var(--line);box-shadow:-12px 0 30px rgba(0,0,0,.12);overflow-y:auto;z-index:10;padding:18px 20px 40px}
+.shade{position:fixed;inset:0;background:rgba(10,14,20,.35);z-index:9}
+.drawer h3{margin:0;font-size:20px}
+.drawer h4{margin:22px 0 8px;font-size:14px}
+.meta{color:var(--muted);font-size:13px;margin-top:4px}
+.close{position:sticky;top:0;float:right}
+.dato{display:grid;grid-template-columns:22px 1fr;gap:4px 8px;padding:9px 0;border-top:1px solid var(--line)}
+.dot{width:12px;height:12px;border-radius:50%;margin-top:4px}
+.ok{background:var(--ok)}.wait{background:var(--wait)}.miss{background:var(--miss)}
+.dato b{font-weight:600}
+.dato .v{grid-column:2;font-size:13.5px;white-space:pre-wrap}
+.dato .src{grid-column:2;color:var(--muted);font-size:12px}
+.ask{grid-column:2;display:flex;gap:8px;align-items:flex-start;background:var(--bg);border-radius:7px;padding:7px 9px;font-size:13px}
+.ask button{flex:none}
+.tl{border-left:2px solid var(--line);margin-left:6px;padding-left:12px}
+.ev{position:relative;padding:6px 0;font-size:13.5px}
+.ev::before{content:"";position:absolute;left:-18px;top:11px;width:10px;height:10px;border-radius:50%;background:var(--line)}
+.ev.etapa::before{background:var(--accent)}.ev.lead::before{background:var(--ok)}.ev.nota::before{background:var(--wait)}
+.ev .when{color:var(--muted);font-size:12px}
+.ev .txt{white-space:pre-wrap}
+.ev.auto .txt{color:var(--auto)}
+.tag{display:inline-block;font-size:11.5px;padding:1px 6px;border-radius:5px;background:var(--bg);margin:2px 3px 0 0}
+.campos div{display:grid;grid-template-columns:minmax(120px,40%) 1fr;gap:8px;padding:5px 0;border-top:1px solid var(--line);font-size:13px}
+.campos span:first-child{color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Portal de setteo</h1>
+  <nav aria-label="Secciones">
+    <button type="button" disabled title="Próximamente">Qué hacer hoy</button>
+    <button type="button" aria-current="true">Leads</button>
+    <button type="button" disabled title="Próximamente">Pauta</button>
+    <button type="button" disabled title="Próximamente">Estadísticas</button>
+  </nav>
+</header>
+
+<div class="bar" id="bar">
+  <div class="seg" id="fPipe" role="group" aria-label="Pipeline"></div>
+  <div class="seg" id="fDays" role="group" aria-label="Último movimiento"></div>
+  <input type="search" id="q" placeholder="Buscar por nombre, mail o teléfono" aria-label="Buscar">
+  <button class="btn" type="button" id="refresh">Actualizar</button>
+</div>
+
+<div id="status" class="status">Cargando…</div>
+<div class="board hidden" id="board"></div>
+
+<div class="shade hidden" id="shade"></div>
+<aside class="drawer hidden" id="drawer" aria-label="Ficha del lead"></aside>
+
+<script>
+const PASS_KEY="portal_pass";
+const tz="America/Argentina/Buenos_Aires";
+const fDT=new Intl.DateTimeFormat("es-AR",{timeZone:tz,day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit",hour12:false});
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+const ago=t=>{if(!t)return"";const h=(Date.now()-t)/36e5;if(h<1)return"hace "+Math.max(1,Math.round(h*60))+" min";if(h<24)return"hace "+Math.round(h)+" h";const d=Math.round(h/24);return d===1?"hace 1 día":"hace "+d+" días"};
+const state={meta:null,pipe:null,days:30,q:"",cols:{},show:{}};
+function getPass(){try{return localStorage.getItem(PASS_KEY)||""}catch(e){return""}}
+function setPass(v){try{v?localStorage.setItem(PASS_KEY,v):localStorage.removeItem(PASS_KEY)}catch(e){}}
+function setStatus(h,err){const s=document.getElementById("status");s.innerHTML=h;s.className="status"+(err?" err":"")}
+class AuthErr extends Error{}
+async function api(params){
+  const r=await fetch("/api/portal?"+new URLSearchParams(params),{headers:{"x-pass":getPass()}});
+  const j=await r.json().catch(()=>({}));
+  if(r.status===401)throw new AuthErr();
+  if(!r.ok)throw new Error(j.message||("Error "+r.status));
+  return j;
+}
+async function pool(tasks,n){let i=0;const out=[];async function w(){while(i<tasks.length){const k=i++;out[k]=await tasks[k]()}}await Promise.all(Array.from({length:n},w));return out}
+function askPass(msg){
+  document.getElementById("board").classList.add("hidden");
+  setStatus(`<b>Ingresá la contraseña del portal</b>${msg?`<div style="color:var(--miss)">${esc(msg)}</div>`:""}<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><input type="password" id="pw" aria-label="Contraseña"><button class="btn main" type="button" id="pwGo">Entrar</button></div>`,!!msg);
+  const go=()=>{const v=document.getElementById("pw").value.trim();if(v){setPass(v);start()}};
+  document.getElementById("pwGo").onclick=go;
+  document.getElementById("pw").onkeydown=e=>{if(e.key==="Enter")go()};
+}
+function segButtons(id,items,cur,on){
+  const el=document.getElementById(id);el.innerHTML="";
+  for(const [k,l] of items){const b=document.createElement("button");b.type="button";b.textContent=l;b.setAttribute("aria-pressed",String(k===cur));b.onclick=()=>on(k);el.append(b)}
+}
+async function start(){
+  if(!getPass()){askPass();return}
+  try{
+    setStatus("Leyendo los pipelines de GoHighLevel…");
+    state.meta=await api({paso:"meta"});
+    const ag=state.meta.pipelines.find(p=>norm(p.name).includes("agendas"));
+    state.pipe=state.pipe||(ag||state.meta.pipelines[0]).id;
+    drawFilters();await loadBoard();
+  }catch(e){if(e instanceof AuthErr){setPass("");askPass("Contraseña incorrecta.");return}setStatus(`<b>No se pudo cargar el portal.</b> ${esc(e.message)}`,true)}
+}
+function drawFilters(){
+  segButtons("fPipe",state.meta.pipelines.map(p=>[p.id,p.name]),state.pipe,k=>{state.pipe=k;drawFilters();loadBoard()});
+  segButtons("fDays",[[7,"Últimos 7 días"],[30,"30 días"],[90,"90 días"],[0,"Todo"]],state.days,k=>{state.days=k;drawFilters();loadBoard()});
+}
+async function loadBoard(){
+  const p=state.meta.pipelines.find(x=>x.id===state.pipe);
+  document.getElementById("board").classList.add("hidden");
+  let done=0;
+  setStatus(`Leyendo ${esc(p.name)}… (0 de ${p.stages.length} etapas)`);
+  try{
+    const res=await pool(p.stages.map(s=>async()=>{const r=await api({paso:"col",pipelineId:p.id,stageId:s.id,days:state.days});done++;setStatus(`Leyendo ${esc(p.name)}… (${done} de ${p.stages.length} etapas)`);return r}),3);
+    state.cols={};p.stages.forEach((s,i)=>{state.cols[s.id]=res[i].opps.sort((a,b)=>b.changed-a.changed)});
+    document.getElementById("status").className="status hidden";
+    drawBoard();
+  }catch(e){if(e instanceof AuthErr){setPass("");askPass("Contraseña incorrecta.");return}setStatus(`<b>No se pudo leer el pipeline.</b> ${esc(e.message)}`,true)}
+}
+function drawBoard(){
+  const p=state.meta.pipelines.find(x=>x.id===state.pipe), q=norm(state.q);
+  const board=document.getElementById("board");board.classList.remove("hidden");board.innerHTML="";
+  for(const s of p.stages){
+    const all=(state.cols[s.id]||[]).filter(o=>!q||norm(o.name+" "+o.email+" "+o.phone).includes(q));
+    const lim=state.show[s.id]||40;
+    const col=document.createElement("section");col.className="col";col.setAttribute("aria-label",s.name);
+    col.innerHTML=`<h2>${esc(s.name)}<span class="n">${all.length}</span></h2><div class="cards"></div>`;
+    const box=col.querySelector(".cards");
+    if(!all.length)box.innerHTML=`<div class="empty">Sin leads${state.days?` movidos en los últimos ${state.days} días`:""}.</div>`;
+    for(const o of all.slice(0,lim)){
+      const b=document.createElement("button");b.type="button";b.className="card";
+      b.innerHTML=`<div class="nm">${esc(o.name)}</div><div class="sub">${esc(ago(o.changed))} en esta etapa${o.source?" · "+esc(o.source):""}</div>`;
+      b.onclick=()=>openLead(o,s.name,p.name);box.append(b);
+    }
+    if(all.length>lim){const m=document.createElement("button");m.type="button";m.className="btn more";m.textContent=`Ver ${Math.min(40,all.length-lim)} más`;m.onclick=()=>{state.show[s.id]=lim+40;drawBoard()};box.append(m)}
+    board.append(col);
+  }
+}
+function closeLead(){document.getElementById("drawer").classList.add("hidden");document.getElementById("shade").classList.add("hidden")}
+async function openLead(o,stage,pipe){
+  const d=document.getElementById("drawer");
+  d.classList.remove("hidden");document.getElementById("shade").classList.remove("hidden");
+  d.innerHTML=`<button class="btn close" type="button" id="cl">Cerrar</button><h3>${esc(o.name)}</h3><div class="meta">${esc(pipe)} · ${esc(stage)} · ${esc(ago(o.changed))}</div><p class="meta">Leyendo el contacto y su conversación…</p>`;
+  document.getElementById("cl").onclick=closeLead;
+  try{
+    const j=await api({paso:"lead",cid:o.cid});
+    const c=j.contacto, loc=state.meta.location;
+    const icon=e=>e==="ok"?"ok":e==="preguntado"||e==="sinrango"?"wait":"miss";
+    const datos=j.datos.map(x=>{
+      let extra="";
+      if(x.k==="inversion"){
+        const partes=[];
+        if(x.preguntaForm)partes.push(`Formulario: "${x.preguntaForm}" → ${x.respuestaForm||"sin respuesta"}${x.vioForm?" (vio el monto)":" (la pregunta no mostraba el monto)"}`);
+        partes.push(x.vioChat?`Chat: se le mandó el monto mínimo${x.respuestaChat?` → respondió: "${x.respuestaChat}"`:" → sin respuesta todavía"}`:"Chat: todavía no se le mandó el monto mínimo");
+        extra=`<div class="v">${esc(partes.join("\n"))}</div>`;
+      }
+      const label=x.estado==="ok"?"Lo sabemos":x.estado==="preguntado"?"Preguntado, sin respuesta":x.estado==="sinrango"?"Respondió, pero no vio el monto":"Falta preguntar";
+      return `<div class="dato"><span class="dot ${icon(x.estado)}" aria-hidden="true"></span><div><b>${esc(x.n)}</b> <span class="meta">· ${label}</span></div>
+        ${x.valor&&x.k!=="inversion"?`<div class="v">${esc(x.valor)}</div>`:""}${extra}
+        ${x.fuente?`<div class="src">${esc(x.fuente)}</div>`:""}
+        ${x.estado!=="ok"?`<div class="ask"><span>${esc(x.pregunta)}</span><button class="btn" type="button" data-copy="${esc(x.pregunta)}">Copiar</button></div>`:""}</div>`;
+    }).join("");
+    const hist=j.historial.map(t=>{
+      if(t.kind==="etapa")return `<div class="ev etapa"><div class="when">${fDT.format(new Date(t.at))} · ${esc(t.pipeline)}</div><div class="txt">${t.from?esc(t.from)+" → ":"Entró a "}<b>${esc(t.to)}</b></div></div>`;
+      if(t.kind==="nota")return `<div class="ev nota"><div class="when">${fDT.format(new Date(t.at))} · nota interna</div><div class="txt">${esc(t.text)}</div></div>`;
+      if(t.kind==="mensaje"){const who=t.sender==="lead"?"Lead":t.sender==="equipo"?"Equipo":t.sender==="automático"?"Automático":esc(t.sender);
+        return `<div class="ev ${t.sender==="lead"?"lead":t.sender==="automático"?"auto":""}"><div class="when">${fDT.format(new Date(t.at))} · ${who}${t.channel?" · "+esc(t.channel.toLowerCase()):""}</div><div class="txt">${esc(t.text)}</div></div>`}
+      return `<div class="ev"><div class="when">${fDT.format(new Date(t.at))}</div><div class="txt">${esc(t.text)}</div></div>`;
+    }).join("")||`<p class="meta">Sin conversación registrada.</p>`;
+    d.innerHTML=`<button class="btn close" type="button" id="cl">Cerrar</button>
+      <h3>${esc(c.nombre||o.name)}</h3>
+      <div class="meta">${esc(pipe)} · ${esc(stage)} · ${esc(ago(o.changed))}</div>
+      <div class="meta">${[c.email,c.telefono].filter(Boolean).map(esc).join(" · ")} · <a href="https://app.gohighlevel.com/v2/location/${esc(loc)}/contacts/detail/${esc(c.id)}" target="_blank" rel="noopener">Abrir en GHL</a></div>
+      <div style="margin-top:6px">${(c.etiquetas||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
+      <h4>Lo que sabemos del lead</h4>${datos}
+      <h4>Historial</h4><div class="tl">${hist}</div>
+      <h4>Respuestas y campos del contacto</h4><div class="campos">${j.campos.map(f=>`<div><span>${esc(f.name)}</span><span>${esc(f.value)}</span></div>`).join("")||'<p class="meta">Sin campos cargados.</p>'}</div>`;
+    document.getElementById("cl").onclick=closeLead;
+    d.querySelectorAll("[data-copy]").forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.copy);b.textContent="Copiado"}catch(e){}});
+  }catch(e){
+    if(e instanceof AuthErr){closeLead();setPass("");askPass("Contraseña incorrecta.");return}
+    d.innerHTML+=`<p style="color:var(--miss)">No se pudo leer el lead: ${esc(e.message)}</p>`;
+  }
+}
+document.getElementById("shade").onclick=closeLead;
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeLead()});
+document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value;if(state.meta)drawBoard()});
+document.getElementById("refresh").onclick=()=>{if(state.meta)loadBoard();else start()};
+start();
+</script>
+</body>
+</html>
