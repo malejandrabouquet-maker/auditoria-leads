@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prueba: historial del lead</title>
+<style>
+:root{--bg:#F3F4F7;--panel:#fff;--ink:#1C2230;--muted:#667085;--line:#E3E6EC}
+@media (prefers-color-scheme: dark){:root{--bg:#181B22;--panel:#21252E;--ink:#E9ECF2;--muted:#9AA3B2;--line:#323846}}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px}
+h1{font-size:26px;margin:0 0 4px}.muted{color:var(--muted);font-size:13.5px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0}
+input,button{font:inherit;padding:8px 12px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+button{background:var(--ink);color:var(--panel);border-color:var(--ink);cursor:pointer}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted)}td.x{color:var(--muted);font-size:12px;word-break:break-all;max-width:360px}
+</style></head><body><div class="wrap">
+<h1>Prueba: historial del lead</h1>
+<div class="muted">Lee todo lo que GHL guarda en la conversación de un lead: mensajes y registros de actividad. Solo lectura.</div>
+<div class="box">
+  <input type="password" id="pw" placeholder="Contraseña de la auditoría">
+  <input type="email" id="em" placeholder="Mail del lead" style="min-width:260px">
+  <button id="go" type="button">Buscar</button>
+  <div id="st" class="muted" style="margin-top:8px"></div>
+</div>
+<div id="out"></div>
+</div>
+<script>
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const f=new Intl.DateTimeFormat("es-AR",{timeZone:"America/Argentina/Buenos_Aires",day:"numeric",month:"numeric",year:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false});
+try{document.getElementById("pw").value=localStorage.getItem("auditoria_leads_pass")||""}catch(e){}
+document.getElementById("go").addEventListener("click",async()=>{
+  const pw=document.getElementById("pw").value.trim(), em=document.getElementById("em").value.trim(), st=document.getElementById("st"), out=document.getElementById("out");
+  if(!pw||!em){st.textContent="Completá la contraseña y el mail.";return}
+  st.textContent="Buscando…"; out.innerHTML="";
+  try{
+    const r=await fetch("/api/auditoria?"+new URLSearchParams({paso:"historial",email:em}),{headers:{"x-pass":pw}});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){st.textContent=(j.message||("Error "+r.status))+(j.detail?" · "+j.detail:"");return}
+    if(!j.encontrado){st.textContent="No encontré un contacto con ese mail.";return}
+    st.textContent="";
+    out.innerHTML=`<div class="box"><b>${esc(j.contacto.nombre)}</b> · ${j.conversaciones} conversación(es) · ${j.mensajes.length} registros<br><span class="muted">Etiquetas: ${esc(j.contacto.etiquetas.join(", ")||"–")}</span><br><span class="muted">Tipos de registro: ${esc(Object.entries(j.tipos).map(([k,v])=>k+": "+v).join(" · "))}</span></div>
+    <div class="box scroll"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Dirección</th><th>Texto</th><th>Detalle</th></tr></thead><tbody>${j.mensajes.map(m=>`<tr><td>${m.fecha?esc(f.format(new Date(m.fecha))):"–"}</td><td>${esc(m.tipo)}</td><td>${esc(m.direccion)}</td><td>${esc(m.texto)}</td><td class="x">${esc(m.extra)}</td></tr>`).join("")}</tbody></table></div>`;
+  }catch(e){st.textContent="Error de conexión."}
+});
+</script></body></html>
