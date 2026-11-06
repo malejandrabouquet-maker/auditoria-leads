@@ -183,6 +183,51 @@ async function lead(cid) {
   };
 }
 
+
+/* ---------- Pauta: oportunidades que entraron en un período ---------- */
+async function entradas(pipelineId, fromMs, toMs) {
+  const pm = await pipeNames();
+  const out = [];
+  let startAfter, startAfterId;
+  for (let page = 0; page < 40; page++) {
+    const j = await ghl("/opportunities/search", { location_id: GHL_LOCATION, pipeline_id: pipelineId, limit: 100, startAfter, startAfterId });
+    const items = j.opportunities || [];
+    for (const o of items) {
+      const created = ms(o.createdAt);
+      if (created < fromMs || created >= toMs) continue;
+      out.push({ cid: o.contactId || o.contact?.id || "", name: o.contact?.name || o.name || "", tags: o.contact?.tags || [],
+        source: o.source || "", stage: pm.s[o.pipelineStageId] || "", created, changed: ms(o.lastStageChangeAt || o.createdAt) });
+    }
+    startAfter = j.meta?.startAfter; startAfterId = j.meta?.startAfterId;
+    const oldest = items.length ? Math.min(...items.map((o) => ms(o.createdAt))) : 0;
+    if (!items.length || !startAfterId || oldest < fromMs) break;
+  }
+  return { opps: out };
+}
+
+/* ---------- Pauta: respuestas del formulario de varios contactos ---------- */
+async function respuestas(ids) {
+  const defs = await customFieldNames();
+  const out = {};
+  for (let i = 0; i < ids.length; i += 8) {
+    await Promise.all(ids.slice(i, i + 8).map(async (id) => {
+      try {
+        const c = (await ghl(`/contacts/${encodeURIComponent(id)}`, {})).contact || {};
+        const f = (c.customFields || []).map((x) => ({ n: norm(defs[x.id] || ""), v: Array.isArray(x.value) ? x.value.join(", ") : String(x.value ?? "") })).filter((x) => x.v.trim());
+        const pick = (re) => f.find((x) => re.test(x.n))?.v || "";
+        out[id] = {
+          tags: c.tags || [],
+          nicho: pick(/modelo de negocio/) || pick(/a que te dedicas/) || pick(/actividad|nicho/),
+          inversion: pick(/inversion|invertir/),
+          vip: pick(/webinar vip/),
+          campaign: pick(/utm campaign/), medium: pick(/utm medium/), content: pick(/utm content/),
+        };
+      } catch { out[id] = null; }
+    }));
+  }
+  return { contactos: out };
+}
+
 export default async (req) => {
   if (!GHL_TOKEN || !PASSWORD) return json(500, { message: "Faltan variables de entorno en Netlify (GHL_TOKEN o DASHBOARD_PASSWORD)." });
   if (!passOk(req.headers.get("x-pass"))) return json(401, { message: "Contraseña incorrecta." });
@@ -192,6 +237,8 @@ export default async (req) => {
       case "meta": return json(200, await meta());
       case "col": return json(200, await col(q("pipelineId"), q("stageId"), Number(q("days")) || 0));
       case "lead": return json(200, await lead(q("cid")));
+      case "entradas": return json(200, await entradas(q("pipelineId"), Number(q("from")), Number(q("to"))));
+      case "respuestas": return json(200, await respuestas(q("ids").split(",").filter(Boolean).slice(0, 50)));
     }
     return json(400, { message: "Pedido inválido." });
   } catch (e) {
