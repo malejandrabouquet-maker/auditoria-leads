@@ -286,7 +286,7 @@ async function openLead(o,stage,pipe){
       <div class="meta">${[c.email,c.telefono].filter(Boolean).map(esc).join(" · ")} · <a href="https://app.gohighlevel.com/v2/location/${esc(loc)}/contacts/detail/${esc(c.id)}" target="_blank" rel="noopener">Abrir en GHL</a></div>
       <div style="margin-top:6px">${(c.etiquetas||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
       ${j.oportunidades.length?`<h4>Dónde está</h4>${j.oportunidades.map(op=>`<div class="meta"><b>${esc(op.pipeline)}</b> · ${esc(op.etapa)} · ${esc(ago(op.cambio))}${/agendas|webinar|seguimientos|prospeccion/.test(norm(op.pipeline))?"":' <span style="color:var(--wait)">· otro pipeline, revisar</span>'}</div>`).join("")}`:""}
-      ${j.origen.campaign||j.origen.medium||j.origen.content?`<h4>De qué anuncio viene</h4><div class="meta">Campaña: ${esc(utm(j.origen.campaign)||"–")}<br>Público (medium): ${esc(utm(j.origen.medium)||"–")}<br>Anuncio (content): ${esc(utm(j.origen.content)||"–")}</div>`:""}
+      ${j.origen.campaign||j.origen.medium||j.origen.content||j.origen.sinUtm?`<h4>De qué anuncio viene</h4>${!j.origen.campaign&&j.origen.sinUtm?`<div class="meta">${esc(j.origen.sinUtm)}</div>`:""}<div class="meta">Campaña: ${esc(utm(j.origen.campaign)||"–")}<br>Público (medium): ${esc(utm(j.origen.medium)||"–")}<br>Anuncio (content): ${esc(utm(j.origen.content)||"–")}</div>`:""}
       <h4>Lo que sabemos del lead</h4>${datos}
       <h4>Historial</h4><div class="tl">${hist}</div>
       <h4>Respuestas y campos del contacto</h4><div class="campos">${j.campos.map(f=>`<div><span>${esc(f.name)}</span><span>${esc(f.value)}</span></div>`).join("")||'<p class="meta">Sin campos cargados.</p>'}</div>`;
@@ -357,7 +357,7 @@ async function pauta(){
       else{const src=norm(g?.source);grupo=src.includes("bio")?"Bio (Instagram)":src.startsWith("vsl")?"VSL (anuncios)":"Otros orígenes"}
       const stage=g&&(!w||g.created>=from)?g.stage:(w?w.stage:g?.stage);
       const nicho=nichoDe(r.nicho), plata=plataDe(r.inversion);
-      return{cid,name:w?.name||g?.name||"",grupo,estado:bucket(stage),nicho,plata,calif:nicho==="Nicho"&&(plata==="Sí puede"||plata==="Con plan de pagos"),campaign:utm(r.campaign)||"Sin campaña (UTM)"};
+      return{cid,name:w?.name||g?.name||"",grupo,estado:bucket(stage),nicho,plata,calif:nicho==="Nicho"&&(plata==="Sí puede"||plata==="Con plan de pagos"),campaign:utm(r.campaign)||r.origen||"Sin dato de origen"};
     });
     // Webinar: no cuentan los que solo se anotaron y siguen en Pre webinar.
     const R=recs.filter(r=>r.estado!=="Solo anotado (pre webinar)");
