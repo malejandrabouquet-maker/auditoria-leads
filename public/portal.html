@@ -310,27 +310,54 @@ async function pauta(){
       const nicho=nichoDe(r.nicho), plata=plataDe(r.inversion);
       return{cid,name:w?.name||g?.name||"",grupo,estado:bucket(stage),nicho,plata,calif:nicho==="Nicho"&&(plata==="Sí puede"||plata==="Con plan de pagos"),campaign:utm(r.campaign)||"Sin campaña (UTM)"};
     });
+    // Webinar: no cuentan los que solo se anotaron y siguen en Pre webinar.
+    const R=recs.filter(r=>!(r.grupo==="Webinar"&&r.estado==="Solo anotado (pre webinar)"));
+    // Plata: formulario + chat, solo para quienes ya hablaron con el equipo.
+    const conChat=R.filter(r=>r.estado!=="Solo anotado (pre webinar)").map(r=>r.cid);
+    const pl={};const pb=[];for(let i=0;i<conChat.length;i+=12)pb.push(conChat.slice(i,i+12));
+    let dp=0;
+    await pool(pb.map(bt=>async()=>{const r=await api({paso:"plata",ids:bt.join(",")});Object.assign(pl,r.plata);dp++;st.textContent=`Revisando la plata en formularios y chats… (${dp} de ${pb.length})`}),2);
+    const cls=t=>{const s=norm(t);if(!s.trim())return"sin";if(/plan|cuota|financ/.test(s))return"plan";if(/(^|[^a-z])no([^a-z]|$)|no puedo|no tengo|no cuento|imposible|no me da/.test(s))return"no";if(/(^|[^a-z])si([^a-z]|$)|claro|dale|puedo|tengo|me interesa|de acuerdo/.test(s))return"si";return"revisar"};
+    for(const r of R){const p=pl[r.cid]||{};r.vioForm=!!p.vioForm;r.vioChat=!!p.vioChat;r.vio=r.vioForm||r.vioChat;
+      r.resp=r.vioChat&&p.respChat?cls(p.respChat):r.vioChat?"sin":r.vioForm?cls(p.respForm):"sin";
+      r.siSinRango=!r.vioForm&&["si","plan"].includes(cls(p.respForm||""));}
     st.className="status hidden";
+    const LLAMADA=["Llamada confirmada","Asistencia cualificada","Seña","Venta","Asistencia sin dinero","Asistencia no encaja","No asistió"];
+    const DEF={"Webinar VIP":"Leads que agendaron una llamada VIP antes del webinar.","Webinar":"Leads del webinar que ya entraron al setteo. No cuenta a quienes solo se anotaron a la clase y siguen en Pre webinar.","VSL (anuncios)":"Leads que llegaron por los anuncios VSL y agendaron.","Bio (Instagram)":"Leads que agendaron desde la bio de Instagram.","Otros orígenes":"Leads que entraron a Agendas por otros caminos."};
     const GR=["Webinar VIP","Webinar","VSL (anuncios)","Bio (Instagram)","Otros orígenes"];
     const periodo=a===b?`el ${longF.format(k2d(a))}`:`del ${longF.format(k2d(a))} al ${longF.format(k2d(b))}`;
     out.innerHTML=GR.map(gname=>{
-      const L=recs.filter(r=>r.grupo===gname); if(!L.length)return"";
-      const n=L.length, pc=v=>Math.round(v*100/n)+"%", cnt=f=>L.filter(f).length;
-      const row=(label,v,hl)=>`<div class="row${hl?" hl":""}"><span>${esc(label)}</span><span class="num">${v}</span><span class="pc">${pc(v)}</span></div>`;
-      const est=ORDEN.map(e=>[e,cnt(r=>r.estado===e)]).filter(x=>x[1]);
-      const camp=[...new Set(L.map(r=>r.campaign))].map(c=>{const C=L.filter(r=>r.campaign===c);return{c,n:C.length,ni:C.filter(r=>r.nicho==="Nicho").length,ca:C.filter(r=>r.calif).length,co:C.filter(r=>["Llamada confirmada","Asistencia cualificada","Seña","Venta","Asistencia sin dinero","Asistencia no encaja","No asistió"].includes(r.estado)).length,ve:C.filter(r=>r.estado==="Venta").length}}).sort((x,y)=>y.n-x.n);
-      const resumen=[`${gname} · leads que entraron ${periodo}: ${n}`,
-        `Nicho: ${cnt(r=>r.nicho==="Nicho")} (${pc(cnt(r=>r.nicho==="Nicho"))}) · No nicho: ${cnt(r=>r.nicho==="No nicho")} · Sin dato: ${cnt(r=>r.nicho==="Sin dato")}`,
-        `Plata (respuesta del form): Sí puede ${cnt(r=>r.plata==="Sí puede")} · Con plan de pagos ${cnt(r=>r.plata==="Con plan de pagos")} · No puede ${cnt(r=>r.plata==="No puede")} · Sin respuesta ${cnt(r=>r.plata==="Sin respuesta")}`,
-        `Calificados (nicho + puede invertir): ${cnt(r=>r.calif)} (${pc(cnt(r=>r.calif))})`,
-        `Estado hoy: `+est.map(([e,v])=>`${e} ${v}`).join(" · ")].join("\n");
-      return `<section class="pcard"><h2>${esc(gname)}<span class="big">${n}</span></h2><div class="meta">Leads que entraron ${esc(periodo)}</div>
-        <h5>Nicho (según el formulario)</h5>${row("Nicho",cnt(r=>r.nicho==="Nicho"),1)}${row("No nicho",cnt(r=>r.nicho==="No nicho"))}${row("Sin dato",cnt(r=>r.nicho==="Sin dato"))}
-        <h5>Plata (respuesta a la inversión en el formulario)</h5>${row("Sí puede invertir",cnt(r=>r.plata==="Sí puede"),1)}${row("Con plan de pagos",cnt(r=>r.plata==="Con plan de pagos"),1)}${row("No puede",cnt(r=>r.plata==="No puede"))}${row("Sin respuesta",cnt(r=>r.plata==="Sin respuesta"))}${cnt(r=>r.plata==="Otra respuesta")?row("Otra respuesta",cnt(r=>r.plata==="Otra respuesta")):""}
-        <h5>Calificados</h5>${row("Nicho + puede invertir",cnt(r=>r.calif),1)}
-        <h5>Qué pasó con ellos hasta hoy</h5>${est.map(([e,v])=>row(e,v,["Llamada confirmada","Asistencia cualificada","Seña","Venta"].includes(e))).join("")}
-        <details><summary>Por campaña</summary><table><thead><tr><th>Campaña</th><th>Leads</th><th>Nicho</th><th>Calif.</th><th>Confirm.</th><th>Ventas</th></tr></thead><tbody>${camp.map(x=>`<tr><td>${esc(x.c)}</td><td>${x.n}</td><td>${x.ni}</td><td>${x.ca}</td><td>${x.co}</td><td>${x.ve}</td></tr>`).join("")}</tbody></table></details>
-        <button class="btn" type="button" style="margin-top:12px" data-res="${esc(resumen)}">Copiar resumen para WhatsApp</button></section>`;
+      const L=R.filter(r=>r.grupo===gname); if(!L.length)return"";
+      const n=L.length, pc=(v,t=n)=>t?Math.round(v*100/t)+"%":"–", cnt=f=>L.filter(f).length;
+      const ni=cnt(r=>r.nicho==="Nicho"), nn=cnt(r=>r.nicho==="No nicho"), nd=cnt(r=>r.nicho==="Sin dato");
+      const V=L.filter(r=>r.vio), vF=cnt(r=>r.vioForm&&!r.vioChat), vC=cnt(r=>r.vioChat&&!r.vioForm), vA=cnt(r=>r.vioForm&&r.vioChat);
+      const rc=k=>V.filter(r=>r.resp===k).length;
+      const siV=V.filter(r=>["si","plan"].includes(r.resp)), siLl=siV.filter(r=>LLAMADA.includes(r.estado)).length;
+      const sSR=L.filter(r=>r.siSinRango), sSRc=sSR.filter(r=>r.vioChat), sSRl=sSRc.filter(r=>LLAMADA.includes(r.estado)).length;
+      const e=k=>cnt(r=>r.estado===k), ll=cnt(r=>LLAMADA.includes(r.estado));
+      const est=ORDEN.map(x=>[x,e(x)]).filter(x=>x[1]);
+      const txt=[`${gname} · ${periodo}`,
+        DEF[gname],
+        ``,
+        `VOLUMEN: ${n} leads.`,
+        ``,
+        `CALIDAD DE NICHO (según lo que eligieron en el formulario): ${ni} de nicho (${pc(ni)}), ${nn} no son de nicho (${pc(nn)}) y ${nd} no respondieron esa pregunta (${pc(nd)}).`,
+        ``,
+        `PLATA:`,
+        `• ${V.length} vieron el rango de inversión (${pc(V.length)}): ${vF} solo en el formulario, ${vC} solo en el chat y ${vA} en los dos. ${n-V.length} todavía no lo vieron.`,
+        V.length?`• Después de ver el rango: ${rc("si")} dijeron que sí, ${rc("plan")} que sí con plan de pagos, ${rc("no")} que no y ${rc("sin")} todavía no respondieron${rc("revisar")?` (${rc("revisar")} respondieron algo que hay que leer)`:""}.`:null,
+        siV.length?`• De los ${siV.length} que dijeron que sí (o con plan de pagos) después de ver el rango, ${siLl} ya llegaron a la llamada.`:null,
+        sSR.length?`• ${sSR.length} respondieron que sí en un formulario que no mostraba el rango. A ${sSRc.length} de ellos se les dijo el rango en el chat, y ${sSRl} fueron a la llamada.`:null,
+        ``,
+        `AVANCE HASTA HOY: `+est.map(([k,v])=>`${k}: ${v}`).join(" · ")+`.`,
+        `• Llegaron a la llamada (confirmada o ya hecha): ${ll} (${pc(ll)}). Asistencias cualificadas: ${e("Asistencia cualificada")}. Señas: ${e("Seña")}. Ventas: ${e("Venta")}.`,
+        `• Descartados: ${e("Descalificado por nicho")} por nicho, ${e("Descalificado por plata")+e("Low ticket (sin plata)")} por plata, ${e("No responde")} no responden, ${e("Datos erróneos")} con datos erróneos y ${e("Cancelado")} cancelados.`
+      ].filter(x=>x!==null).join("\n").replace(/\n\n\n+/g,"\n\n");
+      const camp=[...new Set(L.map(r=>r.campaign))].map(c=>{const C=L.filter(r=>r.campaign===c);return{c,n:C.length,ni:C.filter(r=>r.nicho==="Nicho").length,vi:C.filter(r=>r.vio).length,ll:C.filter(r=>LLAMADA.includes(r.estado)).length,ve:C.filter(r=>r.estado==="Venta").length}}).sort((x,y)=>y.n-x.n);
+      return `<section class="pcard"><h2>${esc(gname)}<span class="big">${n}</span></h2>
+        <div style="white-space:pre-wrap;font-size:13.5px;margin-top:8px">${esc(txt.split("\n").slice(1).join("\n"))}</div>
+        <details><summary>Por campaña</summary><table><thead><tr><th>Campaña</th><th>Leads</th><th>Nicho</th><th>Vieron rango</th><th>Llamada</th><th>Ventas</th></tr></thead><tbody>${camp.map(x=>`<tr><td>${esc(x.c)}</td><td>${x.n}</td><td>${x.ni}</td><td>${x.vi}</td><td>${x.ll}</td><td>${x.ve}</td></tr>`).join("")}</tbody></table></details>
+        <button class="btn" type="button" style="margin-top:12px" data-res="${esc(txt)}">Copiar para WhatsApp</button></section>`;
     }).join("")||`<div class="status">No entraron leads en ese período.</div>`;
     out.querySelectorAll("[data-res]").forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.res);b.textContent="Copiado"}catch(e){}});
   }catch(e){if(e instanceof AuthErr){setPass("");askPass("Contraseña incorrecta.");return}st.className="status err";st.innerHTML=`<b>No se pudo calcular.</b> ${esc(e.message)}`}
