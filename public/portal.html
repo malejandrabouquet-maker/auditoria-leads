@@ -192,6 +192,7 @@ async function openLead(o,stage,pipe){
       return `<div class="dato"><span class="dot ${icon(x.estado)}" aria-hidden="true"></span><div><b>${esc(x.n)}</b> <span class="meta">· ${label}</span></div>
         ${x.valor&&x.k!=="inversion"?`<div class="v">${esc(x.valor)}</div>`:""}${extra}
         ${x.fuente?`<div class="src">${esc(x.fuente)}</div>`:""}
+        ${x.form&&x.k!=="inversion"&&!String(x.fuente).startsWith("Formulario")?`<div class="src">También en el formulario → ${esc(x.form)}</div>`:""}
         ${x.estado!=="ok"?`<div class="ask"><span>${esc(x.pregunta)}</span><button class="btn" type="button" data-copy="${esc(x.pregunta)}">Copiar</button></div>`:""}</div>`;
     }).join("");
     const hist=j.historial.map(t=>{
@@ -206,6 +207,8 @@ async function openLead(o,stage,pipe){
       <div class="meta">${esc(pipe)} · ${esc(stage)} · ${esc(ago(o.changed))}</div>
       <div class="meta">${[c.email,c.telefono].filter(Boolean).map(esc).join(" · ")} · <a href="https://app.gohighlevel.com/v2/location/${esc(loc)}/contacts/detail/${esc(c.id)}" target="_blank" rel="noopener">Abrir en GHL</a></div>
       <div style="margin-top:6px">${(c.etiquetas||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
+      ${j.oportunidades.length?`<h4>Dónde está</h4>${j.oportunidades.map(op=>`<div class="meta"><b>${esc(op.pipeline)}</b> · ${esc(op.etapa)} · ${esc(ago(op.cambio))}</div>`).join("")}`:""}
+      ${j.origen.campaign||j.origen.medium||j.origen.content?`<h4>De qué anuncio viene</h4><div class="meta">Campaña: ${esc(j.origen.campaign||"–")}<br>Público (medium): ${esc(j.origen.medium||"–")}<br>Anuncio (content): ${esc(j.origen.content||"–")}</div>`:""}
       <h4>Lo que sabemos del lead</h4>${datos}
       <h4>Historial</h4><div class="tl">${hist}</div>
       <h4>Respuestas y campos del contacto</h4><div class="campos">${j.campos.map(f=>`<div><span>${esc(f.name)}</span><span>${esc(f.value)}</span></div>`).join("")||'<p class="meta">Sin campos cargados.</p>'}</div>`;
