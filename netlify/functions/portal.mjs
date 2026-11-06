@@ -104,7 +104,8 @@ async function lead(cid) {
     .map((f) => ({ name: defs[f.id] || f.id, value: Array.isArray(f.value) ? f.value.join(", ") : String(f.value ?? "") }))
     .filter((f) => f.value.trim() && !/^(fbc|fbp|fcblid|fbclid|user_agent|event_source_url|ip|timezone)$/i.test(f.name.trim()));
   const pick = (re) => fields.find((f) => re.test(norm(f.name)))?.value || "";
-  const origen = { campaign: pick(/utm campaign/), medium: pick(/utm medium/), content: pick(/utm content/) };
+  const o2 = origenSinUtm(contact);
+  const origen = { campaign: pick(/utm campaign/) || o2.camp, medium: pick(/utm medium/), content: pick(/utm content/), sinUtm: o2.origen };
 
   // Conversación completa: mensajes, notas y cambios de etapa.
   const cs = await ghl("/conversations/search", { locationId: GHL_LOCATION, contactId: cid, limit: 20 }, "2021-04-15");
@@ -205,6 +206,26 @@ async function entradas(pipelineId, fromMs, toMs) {
   return { opps: out };
 }
 
+
+// Origen cuando no hay UTM: se mira lo que GHL guardó de la página (referrer, fuente del evento, url).
+function origenSinUtm(c) {
+  const parts = [];
+  for (const k of ["attributionSource", "lastAttributionSource"]) {
+    const a = c[k];
+    if (a && typeof a === "object") for (const v of Object.values(a)) if (typeof v === "string") parts.push(v);
+  }
+  parts.push(String(c.source || ""));
+  const txt = parts.join(" ").toLowerCase();
+  const camp = ["attributionSource", "lastAttributionSource"].map((k) => c[k]?.utmCampaign || c[k]?.campaign || "").find(Boolean) || "";
+  let origen = "";
+  if (/webinarjam/.test(txt)) origen = "Desde la clase (WebinarJam)";
+  else if (/instagram/.test(txt)) origen = "Instagram (sin UTM)";
+  else if (/facebook|fb\.com|fb\.me/.test(txt)) origen = "Facebook (sin UTM)";
+  else if (/whatsapp|wa\.me/.test(txt)) origen = "WhatsApp (sin UTM)";
+  else if (/google/.test(txt)) origen = "Google (sin UTM)";
+  return { camp, origen };
+}
+
 /* ---------- Pauta: respuestas del formulario de varios contactos ---------- */
 async function respuestas(ids) {
   const defs = await customFieldNames();
@@ -222,6 +243,9 @@ async function respuestas(ids) {
           vip: pick(/webinar vip/),
           campaign: pick(/utm campaign/), medium: pick(/utm medium/), content: pick(/utm content/),
         };
+        const o = origenSinUtm(c);
+        if (!out[id].campaign && o.camp) out[id].campaign = o.camp;
+        out[id].origen = o.origen;
       } catch { out[id] = null; }
     }));
   }
