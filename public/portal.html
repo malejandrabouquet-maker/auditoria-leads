@@ -342,25 +342,31 @@ async function pauta(){
       return{cid,name:w?.name||g?.name||"",grupo,estado:bucket(stage),nicho,plata,calif:nicho==="Nicho"&&(plata==="Sí puede"||plata==="Con plan de pagos"),campaign:utm(r.campaign)||"Sin campaña (UTM)"};
     });
     // Webinar: no cuentan los que solo se anotaron y siguen en Pre webinar.
-    const R=recs.filter(r=>!(r.grupo==="Webinar"&&r.estado==="Solo anotado (pre webinar)"));
+    const R=recs.filter(r=>r.estado!=="Solo anotado (pre webinar)");
     // Plata: formulario + chat, solo para quienes ya hablaron con el equipo.
     const conChat=R.filter(r=>r.estado!=="Solo anotado (pre webinar)").map(r=>r.cid);
     const pl={};const pb=[];for(let i=0;i<conChat.length;i+=12)pb.push(conChat.slice(i,i+12));
     let dp=0;
     await pool(pb.map(bt=>async()=>{const r=await api({paso:"plata",ids:bt.join(",")});Object.assign(pl,r.plata);dp++;st.textContent=`Revisando la plata en formularios y chats… (${dp} de ${pb.length})`}),2);
-    const cls=t=>{const s=norm(t);if(!s.trim())return"sin";if(/plan|cuota|financ/.test(s))return"plan";if(/(^|[^a-z])no([^a-z]|$)|no puedo|no tengo|no cuento|imposible|no me da/.test(s))return"no";if(/(^|[^a-z])si([^a-z]|$)|claro|dale|puedo|tengo|me interesa|de acuerdo/.test(s))return"si";return"revisar"};
-    for(const r of R){const p=pl[r.cid]||{};r.vioForm=!!p.vioForm;r.vioChat=!!p.vioChat;r.vio=r.vioForm||r.vioChat;
+    // Los que fallaron (GHL saturado) se reintentan de a pocos.
+    const fall=conChat.filter(c=>!pl[c]);
+    for(let i=0;i<fall.length;i+=6){st.textContent=`Reintentando ${fall.length} chats que no se pudieron leer…`;try{const r=await api({paso:"plata",ids:fall.slice(i,i+6).join(",")});for(const[k,v]of Object.entries(r.plata))if(v)pl[k]=v}catch(e){}}
+    const cls=t=>{const s=norm(t);if(!s.trim())return"sin";if(/plan|cuota|financ/.test(s))return"plan";if(/(^|[^a-z])no([^a-z]|$)|no puedo|no tengo|no cuento|imposible|no me da/.test(s))return"no";if(/(^|[^a-z])si([^a-z]|$)|claro|dale|puedo|tengo|me interesa|de acuerdo/.test(s))return"si";return"sin"};
+    for(const r of R){const p=pl[r.cid]||{};r.leido=r.estado==="Solo anotado (pre webinar)"||!!pl[r.cid];r.vioForm=!!p.vioForm;r.vioChat=!!p.vioChat;r.vio=r.vioForm||r.vioChat;
       r.resp=r.vioChat&&p.respChat?cls(p.respChat):r.vioChat?"sin":r.vioForm?cls(p.respForm):"sin";
       r.siSinRango=!r.vioForm&&["si","plan"].includes(cls(p.respForm||""));}
     st.className="status hidden";
+    const EN_PROCESO=["VIP en evaluación","En conversación","Triaje","Sin etapa"];
+    const DESC_OTRO=["Descalificado por nicho","No responde","Datos erróneos","Cancelado"];
+    const DESC_PLATA=["Descalificado por plata","Low ticket (sin plata)","Asistencia sin dinero"];
     const LLAMADA=["Agendado","Llamada confirmada","Asistencia cualificada","Seña","Venta","Asistencia sin dinero","Asistencia no encaja","No asistió"];
-    const DEF={"Webinar VIP":"Leads que agendaron una llamada VIP antes del webinar.","Webinar":"Leads del webinar que ya entraron al setteo. No cuenta a quienes solo se anotaron a la clase y siguen en Pre webinar.","VSL (anuncios)":"Leads que llegaron por los anuncios VSL y agendaron.","Bio (Instagram)":"Leads que agendaron desde la bio de Instagram.","Otros orígenes":"Leads que entraron a Agendas por otros caminos."};
+    const DEF={"Webinar VIP":"Leads que agendaron una llamada VIP antes del webinar.","Webinar":"Leads del webinar que ya entraron al setteo.","VSL (anuncios)":"Leads que llegaron por los anuncios VSL y agendaron.","Bio (Instagram)":"Leads que agendaron desde la bio de Instagram.","Otros orígenes":"Leads que entraron a Agendas por otros caminos."};
     const GR=["Webinar VIP","Webinar","VSL (anuncios)","Bio (Instagram)","Otros orígenes"];
     const periodo=a===b?`el ${longF.format(k2d(a))}`:`del ${longF.format(k2d(a))} al ${longF.format(k2d(b))}`;
-    const PL={si:"Sí",plan:"Sí, con plan de pagos",no:"No",sin:"Sin respuesta",revisar:"Para leer"};
+    const PL={si:"Sí",plan:"Sí, con plan de pagos",no:"No",sin:"Sin respuesta clara"};
     const VIO=r=>r.vioForm&&r.vioChat?"Form + chat":r.vioForm?"Formulario":r.vioChat?"Chat":"No";
     const sing=(v,a,b)=>v===1?a:b;
-    document.getElementById("pHead").innerHTML=`<h2 style="margin:0 0 4px">Informe de pauta</h2><div class="meta">Leads que entraron ${esc(periodo)} · generado el ${esc(fDT.format(new Date()))}</div>`;
+    document.getElementById("pHead").innerHTML=`<h2 style="margin:0 0 4px">Informe de pauta</h2><div class="meta">Leads que entraron ${esc(periodo)}. No incluye a quienes siguen en Pre webinar (solo anotados a la clase). Generado el ${esc(fDT.format(new Date()))}</div>`;
     document.getElementById("pHead").classList.remove("hidden");
     out.innerHTML=GR.map(gname=>{
       const L=R.filter(r=>r.grupo===gname); if(!L.length)return"";
@@ -374,8 +380,13 @@ async function pauta(){
       // Tabla de números
       const T=[["sec","Volumen"],["Leads",n],
         ["sec","Nicho (según el formulario)"],["De nicho",cnt(r=>r.nicho==="Nicho")],["No son de nicho",cnt(r=>r.nicho==="No nicho")],["No respondieron la pregunta",cnt(r=>r.nicho==="Sin dato")],
-        ["sec","Plata: ¿vieron el rango de inversión?"],["Lo vieron (total)",V.length],["…solo en el formulario",cnt(r=>r.vioForm&&!r.vioChat)],["…solo en el chat",cnt(r=>r.vioChat&&!r.vioForm)],["…en los dos",cnt(r=>r.vioForm&&r.vioChat)],["Todavía no lo vieron",n-V.length],
-        ["sec","Plata: qué respondieron después de ver el rango"],["Sí",V.filter(r=>r.resp==="si").length],["Sí, con plan de pagos",V.filter(r=>r.resp==="plan").length],["No",V.filter(r=>r.resp==="no").length],["Todavía no respondieron",V.filter(r=>r.resp==="sin").length],["Respuesta para leer",V.filter(r=>r.resp==="revisar").length],
+        ["sec","Plata: ¿vieron el rango de inversión?"],["Lo vieron (total)",V.length],["…solo en el formulario",cnt(r=>r.vioForm&&!r.vioChat)],["…solo en el chat",cnt(r=>r.vioChat&&!r.vioForm)],["…en los dos",cnt(r=>r.vioForm&&r.vioChat)],["Todavía no lo vieron (total)",n-V.length],
+        ["…siguen en proceso (todavía no se llegó a hablar de plata)",cnt(r=>!r.vio&&r.leido&&EN_PROCESO.includes(r.estado))],
+        ["…ya descartados por otro motivo (nicho, no responde, datos)",cnt(r=>!r.vio&&r.leido&&DESC_OTRO.includes(r.estado))],
+        ["…descartados por plata sin que se registre el rango",cnt(r=>!r.vio&&r.leido&&DESC_PLATA.includes(r.estado))],
+        ["…llegaron a la llamada sin que se registre el rango",cnt(r=>!r.vio&&r.leido&&LLAMADA.includes(r.estado))],
+        ["…no se pudo leer su chat (revisar)",cnt(r=>!r.vio&&!r.leido)],
+        ["sec","Plata: qué respondieron después de ver el rango"],["Sí",V.filter(r=>r.resp==="si").length],["Sí, con plan de pagos",V.filter(r=>r.resp==="plan").length],["No",V.filter(r=>r.resp==="no").length],["Sin respuesta (o respuesta no clara)",V.filter(r=>r.resp==="sin").length],
         ["sec","Plata: dijeron que sí en un formulario sin rango"],["Dijeron que sí sin ver el rango",sSR.length],["…a los que después se les dijo el rango en el chat",sSRc.length],["…y llegaron a la llamada",sSRl],
         ["sec","Resultado hasta hoy"],["Llegaron a la llamada (confirmada o ya hecha)",ll],["Asistencias cualificadas",e("Asistencia cualificada")],["Señas",e("Seña")],["Ventas",e("Venta")],
         ["sec","Descartados"],["Por nicho",e("Descalificado por nicho")],["Por plata (incluye low ticket)",e("Descalificado por plata")+e("Low ticket (sin plata)")],["No responden",e("No responde")],["Datos erróneos",e("Datos erróneos")],["Cancelados",e("Cancelado")],
