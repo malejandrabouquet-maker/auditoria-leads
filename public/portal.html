@@ -84,9 +84,13 @@ input[type=search],input[type=password]{border:1px solid var(--line);background:
 .pgrid{grid-template-columns:1fr}
 .phead{padding:0 20px 10px}
 .funnel{margin-top:4px}
-.fr{display:grid;grid-template-columns:minmax(150px,240px) 1fr 44px 150px;gap:10px;align-items:center;padding:3px 0;font-size:13.5px}
+.fr{display:grid;grid-template-columns:minmax(150px,240px) 1fr 44px;gap:10px;align-items:center;padding:3px 0;font-size:13.5px}
 .fb{background:var(--bg);border-radius:5px;height:20px;overflow:hidden}
-.fb span{display:block;height:100%;background:var(--accent);border-radius:5px}
+.fb{display:flex}
+.sg{display:inline-flex;align-items:center;justify-content:center;height:100%;font-size:11px;font-weight:700;color:#fff;min-width:20px;margin-right:2px}
+.sg.a{background:var(--accent)}.sg.p{background:var(--wait)}.sg.d{background:#9AA3B2}
+.leg{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+.leg .sg{width:12px;height:12px;border-radius:3px;margin-right:-8px}
 .fv{font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
 .fp{color:var(--muted);font-size:12.5px}
 .nt,.lt{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
@@ -111,7 +115,7 @@ input[type=search],input[type=password]{border:1px solid var(--line);background:
   .pgrid{display:block;padding:0}
   .pcard{border:0;padding:0;break-before:page}
   .pcard:first-child{break-before:auto}
-  .fb{background:#eee}.fb span{background:#2B5CAB;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .fb{background:#eee}.sg{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .fx{grid-column:1/-1;color:var(--muted);font-size:12px;margin:-1px 0 6px 0;padding-left:2px}
 .sect{margin-top:18px;border-top:2px solid var(--line);padding-top:8px}
 .sectt{font-size:15px;font-weight:700}
@@ -408,8 +412,14 @@ async function pauta(){
         ["Llegaron a la llamada",S4.length,why(not(S3,S4))],
         ["Asistencias cualificadas (incluye señas y ventas)",S5.length,[["esperando la llamada",cnt(r=>ESPERA.includes(r.estado),not(S4,S5))],["no asistieron",e("No asistió",not(S4,S5))],["asistieron sin dinero",e("Asistencia sin dinero",not(S4,S5))],["asistieron, no encajan",e("Asistencia no encaja",not(S4,S5))]]],
         ["Ventas",S6.length,[["con seña, todavía no pagaron",e("Seña",not(S5,S6))],["asistencia cualificada, sin seña todavía",e("Asistencia cualificada",not(S5,S6))]]]];
-      const embudo=`<div class="funnel">${steps.map(([l,v,out],i)=>{const prev=i?steps[i-1][1]:n;const ex=out.filter(x=>x[1]);
-        return `<div class="fr"><div class="fl">${esc(l)}</div><div class="fb"><span style="width:${Math.max(n?v*100/n:0,v?1.5:0)}%"></span></div><div class="fv">${v}</div><div class="fp">${i?(prev?pc(v,prev)+" del paso anterior":"–"):"100%"}</div></div>${ex.length?`<div class="fx">No siguieron: ${ex.map(([k,c])=>`${c} ${esc(k)}`).join(" · ")}</div>`:""}`}).join("")}</div>`;
+      // Cada barra mide como el paso anterior: azul pasaron, amarillo en proceso, gris descartados.
+      const isProc=r=>EN_PROCESO.includes(r.estado)||ESPERA.includes(r.estado)||["Seña","Asistencia cualificada"].includes(r.estado);
+      const W=v=>n?v*100/n:0;
+      const seg=(v,c,t)=>v?`<span class="sg ${c}" style="width:${W(v)}%" title="${esc(t)}: ${v}">${v}</span>`:"";
+      const embudo=`<div class="leg"><span class="sg a"></span>Pasaron <span class="sg p"></span>Siguen en proceso <span class="sg d"></span>Descartados</div><div class="funnel">${steps.map(([l,v],i)=>{
+          const prevArr=[L,L,S1,S2,S3,S4,S5][i], curArr=[L,S1,S2,S3,S4,S5,S6][i], rest=prevArr.filter(r=>!curArr.includes(r));
+          const pr=rest.filter(isProc).length, de=rest.length-pr, prev=prevArr.length;
+          return `<div class="fr"><div class="fl">${esc(l)}</div><div class="fb">${seg(v,"a","Pasaron")}${seg(pr,"p","Siguen en proceso")}${seg(de,"d","Descartados")}</div><div class="fv">${v}</div></div>`}).join("")}</div>`;
       // ---------- Tablas chicas: una pregunta cada una, con total ----------
       const tbl=(title,expl,rows,total)=>{const R2=rows.filter(x=>x[1]);
         return `<div class="mt"><div class="mtt">${esc(title)}</div>${expl?`<div class="mte">${esc(expl)}</div>`:""}<table class="nt"><tbody>${R2.map(([k,v,d])=>`<tr><td>${esc(k)}${d?`<div class="mte">${esc(d)}</div>`:""}</td><td>${v}</td><td>${pc(v,total)}</td></tr>`).join("")||`<tr><td colspan="3" class="mte">Ninguno.</td></tr>`}<tr class="tot"><td>Total</td><td>${total}</td><td>${total?"100%":"–"}</td></tr></tbody></table></div>`};
