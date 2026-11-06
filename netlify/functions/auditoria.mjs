@@ -182,7 +182,9 @@ async function historial(email) {
       const items = Array.isArray(box) ? box : box.messages || [];
       for (const m of items) out.push({
         fecha: m.dateAdded, tipo: m.messageType || m.type, direccion: m.direction || "",
-        texto: String(m.body || m.meta?.text || "").slice(0, 300), extra: m.meta ? JSON.stringify(m.meta).slice(0, 400) : "",
+        texto: String(m.body || m.meta?.text || "").slice(0, 300),
+        // Registro completo (sin el texto) para ver qué más guarda GHL: etapa, quién lo mandó, etc.
+        extra: (() => { const { body, ...resto } = m; return JSON.stringify(resto).slice(0, 1500); })(),
       });
       lastMessageId = box.lastMessageId;
       if (!box.nextPage || !lastMessageId) break;
