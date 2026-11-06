@@ -62,6 +62,14 @@ async function col(pipelineId, stageId, days) {
 }
 
 /* ---------- ficha de un lead ---------- */
+let pipeCache = null;
+async function pipeNames() {
+  if (pipeCache) return pipeCache;
+  const j = await ghl("/opportunities/pipelines", { locationId: GHL_LOCATION });
+  const p = {}, s = {};
+  for (const x of j.pipelines || []) { p[x.id] = x.name; for (const st of x.stages || []) s[st.id] = st.name; }
+  return (pipeCache = { p, s });
+}
 let fieldDefs = null; // nombres de los campos personalizados (caché por instancia)
 async function customFieldNames() {
   if (fieldDefs) return fieldDefs;
@@ -94,7 +102,9 @@ async function lead(cid) {
   const contact = c.contact || {};
   const fields = (contact.customFields || [])
     .map((f) => ({ name: defs[f.id] || f.id, value: Array.isArray(f.value) ? f.value.join(", ") : String(f.value ?? "") }))
-    .filter((f) => f.value.trim());
+    .filter((f) => f.value.trim() && !/^(fbc|fbp|fcblid|fbclid|user_agent|event_source_url|ip|timezone)$/i.test(f.name.trim()));
+  const pick = (re) => fields.find((f) => re.test(norm(f.name)))?.value || "";
+  const origen = { campaign: pick(/utm campaign/), medium: pick(/utm medium/), content: pick(/utm content/) };
 
   // Conversación completa: mensajes, notas y cambios de etapa.
   const cs = await ghl("/conversations/search", { locationId: GHL_LOCATION, contactId: cid, limit: 20 }, "2021-04-15");
@@ -121,6 +131,15 @@ async function lead(cid) {
 
   // Los 6 datos: del formulario, o pregunta hecha en el chat y respuesta del lead.
   const msgs = timeline.filter((t) => t.kind === "mensaje");
+  // Respuesta a una pregunta: todos los mensajes del lead desde la pregunta hasta el siguiente mensaje del equipo.
+  const replyTo = (ask) => {
+    const next = msgs.find((m) => m.at > ask.at && m.dir === "outbound" && m.sender !== "automático" && m !== ask && !d_sameBurst(ask, m));
+    const rs = msgs.filter((m) => m.dir === "inbound" && m.at > ask.at && (!next || m.at < next.at));
+    return rs.map((m) => m.text).join(" / ").slice(0, 600);
+  };
+  // Mensajes del equipo mandados en el mismo minuto que la pregunta cuentan como parte de la pregunta.
+  const d_sameBurst = (a, b) => Math.abs(b.at - a.at) < 60e3;
+  const lastAsk = (re) => [...msgs].reverse().find((m) => m.dir === "outbound" && re.test(norm(m.text)));
   const datos = DATOS.map((d) => {
     const f = fields.find((x) => d.form.test(norm(x.name)));
     const r = { k: d.k, n: d.n, pregunta: d.q, estado: "falta", valor: "", fuente: "" };
@@ -130,12 +149,13 @@ async function lead(cid) {
       else if (inMsg) Object.assign(r, { estado: "ok", valor: inMsg.text.match(/(instagram\.com\/[\w.]+|@[\w.]{3,})/i)[0], fuente: "Chat" });
       return r;
     }
-    const asked = msgs.find((m) => m.dir === "outbound" && d.chat.test(norm(m.text)));
+    const asked = lastAsk(d.chat);
     if (asked) {
-      const reply = msgs.find((m) => m.dir === "inbound" && m.at > asked.at);
-      if (reply) Object.assign(r, { estado: "ok", valor: reply.text.slice(0, 400), fuente: "Chat (respuesta a la pregunta)" });
+      const reply = replyTo(asked);
+      if (reply) Object.assign(r, { estado: "ok", valor: reply, fuente: "Chat (respuesta a la pregunta)" });
       else Object.assign(r, { estado: "preguntado", valor: "", fuente: "Chat: preguntado, sin respuesta" });
     }
+    if (f) r.form = `${f.name}: ${f.value}`;
     if (f && r.estado !== "ok") Object.assign(r, { estado: "ok", valor: f.value, fuente: `Formulario: ${f.name}` });
     if (d.k === "inversion") {
       // ¿Vio el rango? En el form, si la pregunta mostraba el monto; en el chat, si se le mandó el mensaje de inversión.
@@ -143,15 +163,21 @@ async function lead(cid) {
       r.preguntaForm = f ? f.name : "";
       r.respuestaForm = f ? f.value : "";
       r.vioChat = !!asked;
-      const reply = asked ? msgs.find((m) => m.dir === "inbound" && m.at > asked.at) : null;
-      r.respuestaChat = reply ? reply.text.slice(0, 400) : "";
+      r.respuestaChat = asked ? replyTo(asked) : "";
       r.vio = r.vioForm || r.vioChat;
       if (!r.vio) r.estado = r.estado === "ok" ? "sinrango" : r.estado;
     }
     return r;
   });
 
+  // Todas sus oportunidades (para ver, por ejemplo, la etapa en Agendas de un lead que vino del webinar).
+  let oportunidades = [];
+  try {
+    const [os, pm] = await Promise.all([ghl("/opportunities/search", { location_id: GHL_LOCATION, contact_id: cid, limit: 20 }), pipeNames()]);
+    oportunidades = (os.opportunities || []).map((o) => ({ pipeline: pm.p[o.pipelineId] || o.pipelineId, etapa: pm.s[o.pipelineStageId] || "", cambio: ms(o.lastStageChangeAt || o.updatedAt), estado: o.status || "" }));
+  } catch {}
   return {
+    origen, oportunidades,
     contacto: { id: contact.id, nombre: [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.contactName || "", email: contact.email || "", telefono: contact.phone || "", etiquetas: contact.tags || [], alta: ms(contact.dateAdded), fuente: contact.source || "" },
     campos: fields, datos, historial: timeline,
   };
