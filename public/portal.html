@@ -67,6 +67,20 @@ input[type=search],input[type=password]{border:1px solid var(--line);background:
 .tag{display:inline-block;font-size:11.5px;padding:1px 6px;border-radius:5px;background:var(--bg);margin:2px 3px 0 0}
 .campos div{display:grid;grid-template-columns:minmax(120px,40%) 1fr;gap:8px;padding:5px 0;border-top:1px solid var(--line);font-size:13px}
 .campos span:first-child{color:var(--muted)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px;padding:0 20px 24px}
+.pcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.pcard h2{margin:0;font-size:17px;display:flex;align-items:baseline;gap:8px}
+.pcard h2 .big{margin-left:auto;font-size:26px;font-variant-numeric:tabular-nums}
+.pcard h5{margin:14px 0 4px;font-size:12.5px;color:var(--muted);font-weight:600}
+.row{display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:3px 0;font-size:13.5px;border-top:1px solid var(--line)}
+.row .num{font-variant-numeric:tabular-nums;text-align:right;min-width:2.5ch}
+.row .pc{color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;min-width:4ch}
+.hl{font-weight:700}
+.pcard details summary{cursor:pointer;margin-top:12px;font-size:13px;color:var(--accent)}
+.pcard table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+.pcard td,.pcard th{padding:4px 5px;border-top:1px solid var(--line);text-align:right}
+.pcard td:first-child,.pcard th:first-child{text-align:left;word-break:break-word}
+.pcard th{color:var(--muted);font-weight:600}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -75,12 +89,13 @@ input[type=search],input[type=password]{border:1px solid var(--line);background:
   <h1>Portal de setteo</h1>
   <nav aria-label="Secciones">
     <button type="button" disabled title="Próximamente">Qué hacer hoy</button>
-    <button type="button" aria-current="true">Leads</button>
-    <button type="button" disabled title="Próximamente">Pauta</button>
+    <button type="button" aria-current="true" data-view="leads">Leads</button>
+    <button type="button" data-view="pauta">Pauta</button>
     <button type="button" disabled title="Próximamente">Estadísticas</button>
   </nav>
 </header>
 
+<div id="vLeads">
 <div class="bar" id="bar">
   <div class="seg" id="fPipe" role="group" aria-label="Pipeline"></div>
   <div class="seg" id="fDays" role="group" aria-label="Último movimiento"></div>
@@ -90,6 +105,19 @@ input[type=search],input[type=password]{border:1px solid var(--line);background:
 
 <div id="status" class="status">Cargando…</div>
 <div class="board hidden" id="board"></div>
+</div>
+
+<div id="vPauta" class="hidden">
+  <div class="bar">
+    <div class="seg" id="pRange" role="group" aria-label="Período"></div>
+    <span id="pCustom" class="hidden" style="display:inline-flex;gap:6px;align-items:center">
+      <input type="date" id="pFrom" aria-label="Desde" class="btn"> a <input type="date" id="pTo" aria-label="Hasta" class="btn">
+    </span>
+    <button class="btn main" type="button" id="pGo">Calcular</button>
+  </div>
+  <div id="pStatus" class="status">Elegí el período y tocá Calcular. Cuenta los leads que entraron en ese período y muestra qué pasó con cada uno hasta hoy.</div>
+  <div id="pOut" class="pgrid"></div>
+</div>
 
 <div class="shade hidden" id="shade"></div>
 <aside class="drawer hidden" id="drawer" aria-label="Ficha del lead"></aside>
@@ -101,6 +129,7 @@ const fDT=new Intl.DateTimeFormat("es-AR",{timeZone:tz,day:"numeric",month:"nume
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
 const ago=t=>{if(!t)return"";const h=(Date.now()-t)/36e5;if(h<1)return"hace "+Math.max(1,Math.round(h*60))+" min";if(h<24)return"hace "+Math.round(h)+" h";const d=Math.round(h/24);return d===1?"hace 1 día":"hace "+d+" días"};
+const utm=s=>{try{return decodeURIComponent(String(s||"").replace(/\+/g," "))}catch(e){return String(s||"").replace(/\+/g," ")}};
 const state={meta:null,pipe:null,days:30,q:"",cols:{},show:{}};
 function getPass(){try{return localStorage.getItem(PASS_KEY)||""}catch(e){return""}}
 function setPass(v){try{v?localStorage.setItem(PASS_KEY,v):localStorage.removeItem(PASS_KEY)}catch(e){}}
@@ -207,8 +236,8 @@ async function openLead(o,stage,pipe){
       <div class="meta">${esc(pipe)} · ${esc(stage)} · ${esc(ago(o.changed))}</div>
       <div class="meta">${[c.email,c.telefono].filter(Boolean).map(esc).join(" · ")} · <a href="https://app.gohighlevel.com/v2/location/${esc(loc)}/contacts/detail/${esc(c.id)}" target="_blank" rel="noopener">Abrir en GHL</a></div>
       <div style="margin-top:6px">${(c.etiquetas||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>
-      ${j.oportunidades.length?`<h4>Dónde está</h4>${j.oportunidades.map(op=>`<div class="meta"><b>${esc(op.pipeline)}</b> · ${esc(op.etapa)} · ${esc(ago(op.cambio))}</div>`).join("")}`:""}
-      ${j.origen.campaign||j.origen.medium||j.origen.content?`<h4>De qué anuncio viene</h4><div class="meta">Campaña: ${esc(j.origen.campaign||"–")}<br>Público (medium): ${esc(j.origen.medium||"–")}<br>Anuncio (content): ${esc(j.origen.content||"–")}</div>`:""}
+      ${j.oportunidades.length?`<h4>Dónde está</h4>${j.oportunidades.map(op=>`<div class="meta"><b>${esc(op.pipeline)}</b> · ${esc(op.etapa)} · ${esc(ago(op.cambio))}${/agendas|webinar|seguimientos|prospeccion/.test(norm(op.pipeline))?"":' <span style="color:var(--wait)">· otro pipeline, revisar</span>'}</div>`).join("")}`:""}
+      ${j.origen.campaign||j.origen.medium||j.origen.content?`<h4>De qué anuncio viene</h4><div class="meta">Campaña: ${esc(utm(j.origen.campaign)||"–")}<br>Público (medium): ${esc(utm(j.origen.medium)||"–")}<br>Anuncio (content): ${esc(utm(j.origen.content)||"–")}</div>`:""}
       <h4>Lo que sabemos del lead</h4>${datos}
       <h4>Historial</h4><div class="tl">${hist}</div>
       <h4>Respuestas y campos del contacto</h4><div class="campos">${j.campos.map(f=>`<div><span>${esc(f.name)}</span><span>${esc(f.value)}</span></div>`).join("")||'<p class="meta">Sin campos cargados.</p>'}</div>`;
@@ -223,6 +252,97 @@ document.getElementById("shade").onclick=closeLead;
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeLead()});
 document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value;if(state.meta)drawBoard()});
 document.getElementById("refresh").onclick=()=>{if(state.meta)loadBoard();else start()};
+
+/* ================= PAUTA ================= */
+const pst={preset:"7d",from:null,to:null};
+const keyFmt=new Intl.DateTimeFormat("en-CA",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit"});
+const todayKey=()=>keyFmt.format(new Date());
+const k2d=k=>new Date(k+"T12:00:00-03:00");
+const addDays=(k,n)=>keyFmt.format(new Date(k2d(k).getTime()+n*864e5));
+const dStart=k=>new Date(k+"T00:00:00-03:00").getTime();
+const longF=new Intl.DateTimeFormat("es-AR",{timeZone:tz,day:"numeric",month:"long"});
+function pRange(){const t=todayKey();
+  if(pst.preset==="hoy")return[t,t]; if(pst.preset==="ayer"){const a=addDays(t,-1);return[a,a]}
+  if(pst.preset==="custom"&&pst.from&&pst.to)return pst.from<=pst.to?[pst.from,pst.to]:[pst.to,pst.from];
+  return[addDays(t,-6),t]}
+function pFilters(){segButtons("pRange",[["hoy","Hoy"],["ayer","Ayer"],["7d","Últimos 7 días"],["custom","Elegir fechas"]],pst.preset,k=>{pst.preset=k;pFilters();document.getElementById("pCustom").classList.toggle("hidden",k!=="custom")})}
+// Estado actual del lead, agrupado
+function bucket(stage){const s=norm(stage);
+  if(!s)return"Sin etapa";
+  if(s.startsWith("venta"))return"Venta"; if(s.startsWith("sena"))return"Seña";
+  if(s.startsWith("asistencia cualificada"))return"Asistencia cualificada"; if(s.startsWith("asistencia sin dinero"))return"Asistencia sin dinero";
+  if(s.startsWith("asistencia no encaja"))return"Asistencia no encaja"; if(s.startsWith("no asistio"))return"No asistió";
+  if(s.startsWith("nutricion"))return"Llamada confirmada"; if(s.startsWith("triaje"))return"Triaje";
+  if(s.startsWith("agendado"))return"Agendado";
+  if(s.includes("nicho")&&s.startsWith("descualificado"))return"Descalificado por nicho";
+  if(s.startsWith("descualificado"))return"Descalificado por plata"; if(s.startsWith("low ticket"))return"Low ticket (sin plata)";
+  if(s.startsWith("datos erroneos"))return"Datos erróneos"; if(s.startsWith("no responde"))return"No responde"; if(s.startsWith("cancelado"))return"Cancelado";
+  if(s.startsWith("pre webinar"))return"Solo anotado (pre webinar)";
+  if(s.startsWith("vip"))return"VIP en evaluación";
+  return"En conversación";}
+const ORDEN=["Solo anotado (pre webinar)","VIP en evaluación","En conversación","Triaje","Agendado","Llamada confirmada","Asistencia cualificada","Seña","Venta","Asistencia sin dinero","Asistencia no encaja","No asistió","Descalificado por nicho","Descalificado por plata","Low ticket (sin plata)","Datos erróneos","No responde","Cancelado","Sin etapa"];
+const nichoDe=v=>{const s=norm(v);if(!s)return"Sin dato";if(/otro|local fisico|presencial|comercio|clinica/.test(s))return"No nicho";return"Nicho"};
+const plataDe=v=>{const s=norm(v);if(!s)return"Sin respuesta";if(/^no|no puedo|no cuento/.test(s))return"No puede";if(/plan de pago/.test(s))return"Con plan de pagos";if(/^si/.test(s))return"Sí puede";return"Otra respuesta"};
+async function pauta(){
+  const out=document.getElementById("pOut"), st=document.getElementById("pStatus");
+  if(pst.preset==="custom"){pst.from=document.getElementById("pFrom").value;pst.to=document.getElementById("pTo").value;if(!pst.from||!pst.to){st.textContent="Elegí las dos fechas.";return}}
+  const [a,b]=pRange(), from=dStart(a), to=dStart(b)+864e5;
+  out.innerHTML="";st.className="status";
+  try{
+    if(!state.meta)state.meta=await api({paso:"meta"});
+    const W=state.meta.pipelines.find(p=>norm(p.name).includes("webinar")), A=state.meta.pipelines.find(p=>norm(p.name).includes("agendas"));
+    st.textContent="Leyendo los leads que entraron…";
+    const [wj,aj]=await Promise.all([W?api({paso:"entradas",pipelineId:W.id,from,to}):{opps:[]},A?api({paso:"entradas",pipelineId:A.id,from,to:Date.now()+864e5}):{opps:[]}]);
+    const web=new Map();for(const o of wj.opps)if(o.cid&&(!web.has(o.cid)||web.get(o.cid).changed<o.changed))web.set(o.cid,o);
+    const ag=new Map();for(const o of aj.opps)if(o.cid&&(!ag.has(o.cid)||ag.get(o.cid).changed<o.changed))ag.set(o.cid,o);
+    const ids=new Set([...web.keys(),...[...ag.values()].filter(o=>o.created<to).map(o=>o.cid)]);
+    const list=[...ids], resp={};
+    const batches=[];for(let i=0;i<list.length;i+=50)batches.push(list.slice(i,i+50));
+    let d=0;
+    await pool(batches.map(bt=>async()=>{const r=await api({paso:"respuestas",ids:bt.join(",")});Object.assign(resp,r.contactos);d++;st.textContent=`Leyendo las respuestas del formulario… (${d} de ${batches.length})`}),2);
+    const recs=list.map(cid=>{
+      const w=web.get(cid), g=ag.get(cid), r=resp[cid]||{};
+      const tags=(r.tags||w?.tags||g?.tags||[]).map(norm);
+      let grupo;
+      if(w){const vip=tags.some(t=>/sesion.vip/.test(t))||/^s/.test(norm(r.vip))||norm(w.stage).startsWith("vip");grupo=vip?"Webinar VIP":"Webinar";}
+      else{const src=norm(g?.source);grupo=src.includes("bio")?"Bio (Instagram)":src.startsWith("vsl")?"VSL (anuncios)":"Otros orígenes"}
+      const stage=g&&(!w||g.created>=from)?g.stage:(w?w.stage:g?.stage);
+      const nicho=nichoDe(r.nicho), plata=plataDe(r.inversion);
+      return{cid,name:w?.name||g?.name||"",grupo,estado:bucket(stage),nicho,plata,calif:nicho==="Nicho"&&(plata==="Sí puede"||plata==="Con plan de pagos"),campaign:utm(r.campaign)||"Sin campaña (UTM)"};
+    });
+    st.className="status hidden";
+    const GR=["Webinar VIP","Webinar","VSL (anuncios)","Bio (Instagram)","Otros orígenes"];
+    const periodo=a===b?`el ${longF.format(k2d(a))}`:`del ${longF.format(k2d(a))} al ${longF.format(k2d(b))}`;
+    out.innerHTML=GR.map(gname=>{
+      const L=recs.filter(r=>r.grupo===gname); if(!L.length)return"";
+      const n=L.length, pc=v=>Math.round(v*100/n)+"%", cnt=f=>L.filter(f).length;
+      const row=(label,v,hl)=>`<div class="row${hl?" hl":""}"><span>${esc(label)}</span><span class="num">${v}</span><span class="pc">${pc(v)}</span></div>`;
+      const est=ORDEN.map(e=>[e,cnt(r=>r.estado===e)]).filter(x=>x[1]);
+      const camp=[...new Set(L.map(r=>r.campaign))].map(c=>{const C=L.filter(r=>r.campaign===c);return{c,n:C.length,ni:C.filter(r=>r.nicho==="Nicho").length,ca:C.filter(r=>r.calif).length,co:C.filter(r=>["Llamada confirmada","Asistencia cualificada","Seña","Venta","Asistencia sin dinero","Asistencia no encaja","No asistió"].includes(r.estado)).length,ve:C.filter(r=>r.estado==="Venta").length}}).sort((x,y)=>y.n-x.n);
+      const resumen=[`${gname} · leads que entraron ${periodo}: ${n}`,
+        `Nicho: ${cnt(r=>r.nicho==="Nicho")} (${pc(cnt(r=>r.nicho==="Nicho"))}) · No nicho: ${cnt(r=>r.nicho==="No nicho")} · Sin dato: ${cnt(r=>r.nicho==="Sin dato")}`,
+        `Plata (respuesta del form): Sí puede ${cnt(r=>r.plata==="Sí puede")} · Con plan de pagos ${cnt(r=>r.plata==="Con plan de pagos")} · No puede ${cnt(r=>r.plata==="No puede")} · Sin respuesta ${cnt(r=>r.plata==="Sin respuesta")}`,
+        `Calificados (nicho + puede invertir): ${cnt(r=>r.calif)} (${pc(cnt(r=>r.calif))})`,
+        `Estado hoy: `+est.map(([e,v])=>`${e} ${v}`).join(" · ")].join("\n");
+      return `<section class="pcard"><h2>${esc(gname)}<span class="big">${n}</span></h2><div class="meta">Leads que entraron ${esc(periodo)}</div>
+        <h5>Nicho (según el formulario)</h5>${row("Nicho",cnt(r=>r.nicho==="Nicho"),1)}${row("No nicho",cnt(r=>r.nicho==="No nicho"))}${row("Sin dato",cnt(r=>r.nicho==="Sin dato"))}
+        <h5>Plata (respuesta a la inversión en el formulario)</h5>${row("Sí puede invertir",cnt(r=>r.plata==="Sí puede"),1)}${row("Con plan de pagos",cnt(r=>r.plata==="Con plan de pagos"),1)}${row("No puede",cnt(r=>r.plata==="No puede"))}${row("Sin respuesta",cnt(r=>r.plata==="Sin respuesta"))}${cnt(r=>r.plata==="Otra respuesta")?row("Otra respuesta",cnt(r=>r.plata==="Otra respuesta")):""}
+        <h5>Calificados</h5>${row("Nicho + puede invertir",cnt(r=>r.calif),1)}
+        <h5>Qué pasó con ellos hasta hoy</h5>${est.map(([e,v])=>row(e,v,["Llamada confirmada","Asistencia cualificada","Seña","Venta"].includes(e))).join("")}
+        <details><summary>Por campaña</summary><table><thead><tr><th>Campaña</th><th>Leads</th><th>Nicho</th><th>Calif.</th><th>Confirm.</th><th>Ventas</th></tr></thead><tbody>${camp.map(x=>`<tr><td>${esc(x.c)}</td><td>${x.n}</td><td>${x.ni}</td><td>${x.ca}</td><td>${x.co}</td><td>${x.ve}</td></tr>`).join("")}</tbody></table></details>
+        <button class="btn" type="button" style="margin-top:12px" data-res="${esc(resumen)}">Copiar resumen para WhatsApp</button></section>`;
+    }).join("")||`<div class="status">No entraron leads en ese período.</div>`;
+    out.querySelectorAll("[data-res]").forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.res);b.textContent="Copiado"}catch(e){}});
+  }catch(e){if(e instanceof AuthErr){setPass("");askPass("Contraseña incorrecta.");return}st.className="status err";st.innerHTML=`<b>No se pudo calcular.</b> ${esc(e.message)}`}
+}
+document.querySelectorAll("nav [data-view]").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("nav [data-view]").forEach(x=>x.setAttribute("aria-current",String(x===b)));
+  document.getElementById("vLeads").classList.toggle("hidden",b.dataset.view!=="leads");
+  document.getElementById("vPauta").classList.toggle("hidden",b.dataset.view!=="pauta");
+});
+pFilters();
+(()=>{const t=todayKey();const f=document.getElementById("pFrom"),to=document.getElementById("pTo");f.value=addDays(t,-6);to.value=t;f.max=t;to.max=t})();
+document.getElementById("pGo").onclick=()=>{if(!getPass()){askPass();return}pauta()};
 start();
 </script>
 </body>
