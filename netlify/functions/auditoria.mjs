@@ -29,11 +29,11 @@ const norm = (s) =>
     .replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 const ms = (v) => (typeof v === "number" ? v : Date.parse(v || 0) || 0);
 
-async function ghl(path, params) {
+async function ghl(path, params, version = "2021-07-28") {
   const u = new URL("https://services.leadconnectorhq.com" + path);
   for (const [k, v] of Object.entries(params || {})) if (v !== undefined && v !== "") u.searchParams.set(k, String(v));
   for (let attempt = 0; ; attempt++) {
-    const r = await fetch(u, { headers: { Authorization: `Bearer ${GHL_TOKEN}`, Version: "2021-07-28", Accept: "application/json" } });
+    const r = await fetch(u, { headers: { Authorization: `Bearer ${GHL_TOKEN}`, Version: version, Accept: "application/json" } });
     if (r.status === 429 && attempt < 3) {
       const ra = parseFloat(r.headers.get("retry-after") || "");
       await new Promise((res) => setTimeout(res, Math.min(Number.isFinite(ra) ? ra * 1000 : 800 * (attempt + 1), 2500)));
@@ -164,6 +164,36 @@ async function contactos(ids) {
   return { tags: out };
 }
 
+/* ---------- paso "historial": prueba de lectura del chat de un lead ---------- */
+// Busca el contacto por mail y devuelve todo lo que GHL guarda en su conversación
+// (mensajes y registros de actividad), para ver si los cambios de etapa se pueden leer.
+async function historial(email) {
+  const d = await ghl("/contacts/search/duplicate", { locationId: GHL_LOCATION, email });
+  const c = d.contact;
+  if (!c) return { encontrado: false };
+  const cs = await ghl("/conversations/search", { locationId: GHL_LOCATION, contactId: c.id, limit: 20 }, "2021-04-15");
+  const convs = cs.conversations || [];
+  const out = [];
+  for (const cv of convs) {
+    let lastMessageId;
+    for (let page = 0; page < 5; page++) {
+      const j = await ghl(`/conversations/${cv.id}/messages`, { limit: 100, lastMessageId }, "2021-04-15");
+      const box = j.messages || {};
+      const items = Array.isArray(box) ? box : box.messages || [];
+      for (const m of items) out.push({
+        fecha: m.dateAdded, tipo: m.messageType || m.type, direccion: m.direction || "",
+        texto: String(m.body || m.meta?.text || "").slice(0, 300), extra: m.meta ? JSON.stringify(m.meta).slice(0, 400) : "",
+      });
+      lastMessageId = box.lastMessageId;
+      if (!box.nextPage || !lastMessageId) break;
+    }
+  }
+  out.sort((a, b) => Date.parse(a.fecha || 0) - Date.parse(b.fecha || 0));
+  const tipos = {};
+  for (const m of out) tipos[m.tipo] = (tipos[m.tipo] || 0) + 1;
+  return { encontrado: true, contacto: { id: c.id, nombre: [c.firstName, c.lastName].filter(Boolean).join(" "), etiquetas: c.tags || [] }, conversaciones: convs.length, tipos, mensajes: out };
+}
+
 export default async (req) => {
   if (!GHL_TOKEN || !PASSWORD) return json(500, { message: "Faltan variables de entorno en Netlify (GHL_TOKEN o DASHBOARD_PASSWORD)." });
   if (!passOk(req.headers.get("x-pass"))) return json(401, { message: "Contraseña incorrecta." });
@@ -177,6 +207,7 @@ export default async (req) => {
       case "citas": if (!isDay(from) || !isDay(to)) break; return json(200, await citas(q("calendarId"), from, to));
       case "slack": if (!isDay(from) || !isDay(to)) break; return json(200, await slack(from, to));
       case "contactos": return json(200, await contactos(q("ids").split(",").filter(Boolean).slice(0, 25)));
+      case "historial": return json(200, await historial(q("email").trim()));
     }
     return json(400, { message: "Pedido inválido." });
   } catch (e) {
