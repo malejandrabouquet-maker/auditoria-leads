@@ -228,6 +228,47 @@ async function respuestas(ids) {
   return { contactos: out };
 }
 
+/* ---------- Pauta: la plata de cada lead (formulario + chat) ---------- */
+const INV_CHAT = /inversion.*(2000|2 000|2\.000|usd)|(2000|2 000|2\.000|usd).*inversion/;
+async function mensajesDe(cid) {
+  const cs = await ghl("/conversations/search", { locationId: GHL_LOCATION, contactId: cid, limit: 20 }, "2021-04-15");
+  const raw = [];
+  for (const cv of cs.conversations || []) {
+    let lastMessageId;
+    for (let page = 0; page < 5; page++) {
+      const j = await ghl(`/conversations/${cv.id}/messages`, { limit: 100, lastMessageId }, "2021-04-15");
+      const box = j.messages || {};
+      raw.push(...(Array.isArray(box) ? box : box.messages || []));
+      lastMessageId = box.lastMessageId;
+      if (!box.nextPage || !lastMessageId) break;
+    }
+  }
+  return raw.filter((m) => !m.activity && m.messageType !== "TYPE_INTERNAL_COMMENT")
+    .map((m) => ({ at: ms(m.dateAdded), dir: m.direction || "", auto: m.source === "workflow", text: String(m.body || "") }))
+    .sort((a, b) => a.at - b.at);
+}
+async function plata(ids) {
+  const defs = await customFieldNames();
+  const out = {};
+  for (let i = 0; i < ids.length; i += 4) {
+    await Promise.all(ids.slice(i, i + 4).map(async (cid) => {
+      try {
+        const [c, msgs] = await Promise.all([ghl(`/contacts/${encodeURIComponent(cid)}`, {}), mensajesDe(cid)]);
+        const f = ((c.contact || {}).customFields || []).map((x) => ({ n: defs[x.id] || "", v: String(x.value ?? "") })).find((x) => /inversion|invertir/.test(norm(x.n)) && x.v.trim());
+        // Última vez que el equipo le dijo el monto en el chat, y lo que respondió hasta el siguiente mensaje del equipo.
+        const ask = [...msgs].reverse().find((m) => m.dir === "outbound" && INV_CHAT.test(norm(m.text)));
+        let resp = "";
+        if (ask) {
+          const next = msgs.find((m) => m.at > ask.at + 60e3 && m.dir === "outbound" && !m.auto);
+          resp = msgs.filter((m) => m.dir === "inbound" && m.at > ask.at && (!next || m.at < next.at)).map((m) => m.text).join(" / ").slice(0, 400);
+        }
+        out[cid] = { vioForm: !!(f && /\d/.test(f.n)), respForm: f ? f.v : "", vioChat: !!ask, respChat: resp };
+      } catch { out[cid] = null; }
+    }));
+  }
+  return { plata: out };
+}
+
 export default async (req) => {
   if (!GHL_TOKEN || !PASSWORD) return json(500, { message: "Faltan variables de entorno en Netlify (GHL_TOKEN o DASHBOARD_PASSWORD)." });
   if (!passOk(req.headers.get("x-pass"))) return json(401, { message: "Contraseña incorrecta." });
@@ -238,6 +279,7 @@ export default async (req) => {
       case "col": return json(200, await col(q("pipelineId"), q("stageId"), Number(q("days")) || 0));
       case "lead": return json(200, await lead(q("cid")));
       case "entradas": return json(200, await entradas(q("pipelineId"), Number(q("from")), Number(q("to"))));
+      case "plata": return json(200, await plata(q("ids").split(",").filter(Boolean).slice(0, 12)));
       case "respuestas": return json(200, await respuestas(q("ids").split(",").filter(Boolean).slice(0, 50)));
     }
     return json(400, { message: "Pedido inválido." });
