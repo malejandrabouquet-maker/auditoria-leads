@@ -92,6 +92,13 @@ input[type=search],input[type=password]{border:1px solid var(--line);background:
 .nt,.lt{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
 .nt td,.nt th,.lt td,.lt th{padding:5px 7px;border-top:1px solid var(--line);text-align:left}
 .nt td:nth-child(n+2),.nt th:nth-child(n+2){text-align:right;font-variant-numeric:tabular-nums;width:90px}
+.fx{grid-column:1/-1;color:var(--muted);font-size:12px;margin:-1px 0 6px 0;padding-left:2px}
+.sect{margin-top:18px;border-top:2px solid var(--line);padding-top:8px}
+.sectt{font-size:15px;font-weight:700}
+.mt{margin-top:10px;break-inside:avoid}
+.mtt{font-weight:600;font-size:13.5px}
+.mte{color:var(--muted);font-size:12px;margin:1px 0 3px}
+.nt tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .nt tr.sec td{background:var(--bg);font-weight:700;font-size:12.5px}
 .lt th,.nt th{color:var(--muted);font-weight:600}
 .scroll{overflow-x:auto}
@@ -105,7 +112,14 @@ input[type=search],input[type=password]{border:1px solid var(--line);background:
   .pcard{border:0;padding:0;break-before:page}
   .pcard:first-child{break-before:auto}
   .fb{background:#eee}.fb span{background:#2B5CAB;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .nt tr.sec td{background:#eee;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .fx{grid-column:1/-1;color:var(--muted);font-size:12px;margin:-1px 0 6px 0;padding-left:2px}
+.sect{margin-top:18px;border-top:2px solid var(--line);padding-top:8px}
+.sectt{font-size:15px;font-weight:700}
+.mt{margin-top:10px;break-inside:avoid}
+.mtt{font-weight:600;font-size:13.5px}
+.mte{color:var(--muted);font-size:12px;margin:1px 0 3px}
+.nt tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+.nt tr.sec td{background:#eee;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .nt,.funnel{break-inside:avoid}
   .lt tr{break-inside:avoid}
   .scroll{overflow:visible}
@@ -309,9 +323,9 @@ function bucket(stage){const s=norm(stage);
   if(s.startsWith("descualificado"))return"Descalificado por plata"; if(s.startsWith("low ticket"))return"Low ticket (sin plata)";
   if(s.startsWith("datos erroneos"))return"Datos erróneos"; if(s.startsWith("no responde"))return"No responde"; if(s.startsWith("cancelado"))return"Cancelado";
   if(s.startsWith("pre webinar"))return"Solo anotado (pre webinar)";
-  if(s.startsWith("vip"))return"VIP en evaluación";
+  if(s.startsWith("vip"))return"Nuevo VIP";
   return"En conversación";}
-const ORDEN=["Solo anotado (pre webinar)","VIP en evaluación","En conversación","Triaje","Agendado","Llamada confirmada","Asistencia cualificada","Seña","Venta","Asistencia sin dinero","Asistencia no encaja","No asistió","Descalificado por nicho","Descalificado por plata","Low ticket (sin plata)","Datos erróneos","No responde","Cancelado","Sin etapa"];
+const ORDEN=["Solo anotado (pre webinar)","Nuevo VIP","En conversación","Triaje","Agendado","Llamada confirmada","Asistencia cualificada","Seña","Venta","Asistencia sin dinero","Asistencia no encaja","No asistió","Descalificado por nicho","Descalificado por plata","Low ticket (sin plata)","Datos erróneos","No responde","Cancelado","Sin etapa"];
 const nichoDe=v=>{const s=norm(v);if(!s)return"Sin dato";if(/otro|local fisico|presencial|comercio|clinica/.test(s))return"No nicho";return"Nicho"};
 const plataDe=v=>{const s=norm(v);if(!s)return"Sin respuesta";if(/^no|no puedo|no cuento/.test(s))return"No puede";if(/plan de pago/.test(s))return"Con plan de pagos";if(/^si/.test(s))return"Sí puede";return"Otra respuesta"};
 async function pauta(){
@@ -356,7 +370,7 @@ async function pauta(){
       r.resp=r.vioChat&&p.respChat?cls(p.respChat):r.vioChat?"sin":r.vioForm?cls(p.respForm):"sin";
       r.siSinRango=!r.vioForm&&["si","plan"].includes(cls(p.respForm||""));}
     st.className="status hidden";
-    const EN_PROCESO=["VIP en evaluación","En conversación","Triaje","Sin etapa"];
+    const EN_PROCESO=["Nuevo VIP","En conversación","Triaje","Sin etapa"];
     const DESC_OTRO=["Descalificado por nicho","No responde","Datos erróneos","Cancelado"];
     const DESC_PLATA=["Descalificado por plata","Low ticket (sin plata)","Asistencia sin dinero"];
     const LLAMADA=["Agendado","Llamada confirmada","Asistencia cualificada","Seña","Venta","Asistencia sin dinero","Asistencia no encaja","No asistió"];
@@ -368,36 +382,62 @@ async function pauta(){
     const sing=(v,a,b)=>v===1?a:b;
     document.getElementById("pHead").innerHTML=`<h2 style="margin:0 0 4px">Informe de pauta</h2><div class="meta">Leads que entraron ${esc(periodo)}. No incluye a quienes siguen en Pre webinar (solo anotados a la clase). Generado el ${esc(fDT.format(new Date()))}</div>`;
     document.getElementById("pHead").classList.remove("hidden");
+    // Se completa con la etapa: quien llegó a la llamada dijo que sí; quien se descartó por plata dijo que no.
+    for(const r of R){
+      r.enLlamada=LLAMADA.includes(r.estado); r.descPlata=DESC_PLATA.includes(r.estado);
+      if(r.enLlamada&&!["si","plan"].includes(r.resp))r.resp="si";
+      else if(r.descPlata&&!["no"].includes(r.resp)&&r.resp!=="si"&&r.resp!=="plan")r.resp="no";
+      else if(r.resp==="sin")r.resp="proceso";
+      r.vioEf=r.vio||r.enLlamada||r.descPlata;            // si llegó a la llamada o se descartó por plata, se habló de plata
+      r.nichoEf=r.nicho==="Nicho"||r.enLlamada;            // si llegó a la llamada, el setter lo aceptó como nicho
+    }
     out.innerHTML=GR.map(gname=>{
       const L=R.filter(r=>r.grupo===gname); if(!L.length)return"";
-      const n=L.length, pc=(v,t=n)=>t?Math.round(v*100/t)+"%":"–", cnt=f=>L.filter(f).length, e=k=>cnt(r=>r.estado===k);
-      const V=L.filter(r=>r.vio), siV=V.filter(r=>["si","plan"].includes(r.resp));
-      const ll=cnt(r=>LLAMADA.includes(r.estado)), ac=e("Asistencia cualificada")+e("Seña")+e("Venta");
-      const sSR=L.filter(r=>r.siSinRango), sSRc=sSR.filter(r=>r.vioChat), sSRl=sSRc.filter(r=>LLAMADA.includes(r.estado)).length;
-      // Embudo
-      const steps=[["Entraron",n,""],["De nicho",cnt(r=>r.nicho==="Nicho"),""],["Vieron el rango de inversión",V.length,""],["Dijeron que sí después de ver el rango",siV.length,V.length?`${pc(siV.length,V.length)} de los que lo vieron`:""],["Llegaron a la llamada",ll,""],["Asistencias cualificadas (incluye señas y ventas)",ac,""],["Ventas",e("Venta"),""]];
-      const embudo=`<div class="funnel">${steps.map(([l,v,x])=>`<div class="fr"><div class="fl">${esc(l)}</div><div class="fb"><span style="width:${Math.max(n?v*100/n:0,v?2:0)}%"></span></div><div class="fv">${v}</div><div class="fp">${x?esc(x):pc(v)}</div></div>`).join("")}</div>`;
-      // Tabla de números
-      const T=[["sec","Volumen"],["Leads",n],
-        ["sec","Nicho (según el formulario)"],["De nicho",cnt(r=>r.nicho==="Nicho")],["No son de nicho",cnt(r=>r.nicho==="No nicho")],["No respondieron la pregunta",cnt(r=>r.nicho==="Sin dato")],
-        ["sec","Plata: ¿vieron el rango de inversión?"],["Lo vieron (total)",V.length],["…solo en el formulario",cnt(r=>r.vioForm&&!r.vioChat)],["…solo en el chat",cnt(r=>r.vioChat&&!r.vioForm)],["…en los dos",cnt(r=>r.vioForm&&r.vioChat)],["Todavía no lo vieron (total)",n-V.length],
-        ["…siguen en proceso (todavía no se llegó a hablar de plata)",cnt(r=>!r.vio&&r.leido&&EN_PROCESO.includes(r.estado))],
-        ["…ya descartados por otro motivo (nicho, no responde, datos)",cnt(r=>!r.vio&&r.leido&&DESC_OTRO.includes(r.estado))],
-        ["…descartados por plata sin que se registre el rango",cnt(r=>!r.vio&&r.leido&&DESC_PLATA.includes(r.estado))],
-        ["…llegaron a la llamada sin que se registre el rango",cnt(r=>!r.vio&&r.leido&&LLAMADA.includes(r.estado))],
-        ["…no se pudo leer su chat (revisar)",cnt(r=>!r.vio&&!r.leido)],
-        ["sec","Plata: qué respondieron después de ver el rango"],["Sí",V.filter(r=>r.resp==="si").length],["Sí, con plan de pagos",V.filter(r=>r.resp==="plan").length],["No",V.filter(r=>r.resp==="no").length],["Sin respuesta (o respuesta no clara)",V.filter(r=>r.resp==="sin").length],
-        ["sec","Plata: dijeron que sí en un formulario sin rango"],["Dijeron que sí sin ver el rango",sSR.length],["…a los que después se les dijo el rango en el chat",sSRc.length],["…y llegaron a la llamada",sSRl],
-        ["sec","Resultado hasta hoy"],["Llegaron a la llamada (confirmada o ya hecha)",ll],["Asistencias cualificadas",e("Asistencia cualificada")],["Señas",e("Seña")],["Ventas",e("Venta")],
-        ["sec","Descartados"],["Por nicho",e("Descalificado por nicho")],["Por plata (incluye low ticket)",e("Descalificado por plata")+e("Low ticket (sin plata)")],["No responden",e("No responde")],["Datos erróneos",e("Datos erróneos")],["Cancelados",e("Cancelado")],
-        ["sec","Etapa en la que están hoy"],...ORDEN.map(k=>[k,e(k)]).filter(x=>x[1])];
-      const tabla=`<table class="nt"><thead><tr><th>Dato</th><th>Cantidad</th><th>% del total</th></tr></thead><tbody>${T.map(([k,v])=>k==="sec"?`<tr class="sec"><td colspan="3">${esc(v)}</td></tr>`:`<tr><td>${esc(k)}</td><td>${v}</td><td>${pc(v)}</td></tr>`).join("")}</tbody></table>`;
-      // Desglose de leads
+      const n=L.length, pc=(v,t=n)=>t?Math.round(v*100/t)+"%":"–", cnt=(f,A=L)=>A.filter(f).length, e=(k,A=L)=>cnt(r=>r.estado===k,A);
+      const ESPERA=["Agendado","Llamada confirmada"];
+      // ---------- Embudo: cada paso sale del anterior, y al costado quién no siguió ----------
+      const S1=L.filter(r=>r.nichoEf), S2=S1.filter(r=>r.vioEf), S3=S2.filter(r=>["si","plan"].includes(r.resp)), S4=S3.filter(r=>r.enLlamada);
+      const S5=S4.filter(r=>["Asistencia cualificada","Seña","Venta"].includes(r.estado)), S6=S5.filter(r=>r.estado==="Venta");
+      const why=(A)=>[["siguen conversando",cnt(r=>EN_PROCESO.includes(r.estado),A)],["no responden",e("No responde",A)],["descartados por nicho",e("Descalificado por nicho",A)],["descartados por plata",cnt(r=>r.descPlata,A)],["datos erróneos",e("Datos erróneos",A)],["cancelados",e("Cancelado",A)]];
+      const not=(A,B)=>A.filter(r=>!B.includes(r));
+      const steps=[
+        ["Entraron",n,[]],
+        ["Son de nicho",S1.length,[["no son de nicho",cnt(r=>r.nicho==="No nicho",not(L,S1))],["no respondieron a qué se dedican",cnt(r=>r.nicho==="Sin dato",not(L,S1))]]],
+        ["Vieron el rango de inversión",S2.length,why(not(S1,S2)).map(([k,v])=>[k==="siguen conversando"?"todavía no se habló de plata":k,v])],
+        ["Dijeron que sí (o con plan de pagos)",S3.length,[["dijeron que no",cnt(r=>r.resp==="no",not(S2,S3))],["en proceso",cnt(r=>r.resp==="proceso",not(S2,S3))]]],
+        ["Llegaron a la llamada",S4.length,why(not(S3,S4))],
+        ["Asistencias cualificadas (incluye señas y ventas)",S5.length,[["esperando la llamada",cnt(r=>ESPERA.includes(r.estado),not(S4,S5))],["no asistieron",e("No asistió",not(S4,S5))],["asistieron sin dinero",e("Asistencia sin dinero",not(S4,S5))],["asistieron, no encajan",e("Asistencia no encaja",not(S4,S5))]]],
+        ["Ventas",S6.length,[["con seña, todavía no pagaron",e("Seña",not(S5,S6))],["asistencia cualificada, sin seña todavía",e("Asistencia cualificada",not(S5,S6))]]]];
+      const embudo=`<div class="funnel">${steps.map(([l,v,out],i)=>{const prev=i?steps[i-1][1]:n;const ex=out.filter(x=>x[1]);
+        return `<div class="fr"><div class="fl">${esc(l)}</div><div class="fb"><span style="width:${Math.max(n?v*100/n:0,v?1.5:0)}%"></span></div><div class="fv">${v}</div><div class="fp">${i?(prev?pc(v,prev)+" del paso anterior":"–"):"100%"}</div></div>${ex.length?`<div class="fx">No siguieron: ${ex.map(([k,c])=>`${c} ${esc(k)}`).join(" · ")}</div>`:""}`}).join("")}</div>`;
+      // ---------- Tablas chicas: una pregunta cada una, con total ----------
+      const tbl=(title,expl,rows,total)=>{const R2=rows.filter(x=>x[1]);
+        return `<div class="mt"><div class="mtt">${esc(title)}</div>${expl?`<div class="mte">${esc(expl)}</div>`:""}<table class="nt"><tbody>${R2.map(([k,v,d])=>`<tr><td>${esc(k)}${d?`<div class="mte">${esc(d)}</div>`:""}</td><td>${v}</td><td>${pc(v,total)}</td></tr>`).join("")||`<tr><td colspan="3" class="mte">Ninguno.</td></tr>`}<tr class="tot"><td>Total</td><td>${total}</td><td>${total?"100%":"–"}</td></tr></tbody></table></div>`};
+      const V=L.filter(r=>r.vio), NV=L.filter(r=>!r.vio), Y=L.filter(r=>["si","plan"].includes(r.resp)&&r.vioEf);
+      const sSR=L.filter(r=>r.siSinRango), sSRc=sSR.filter(r=>r.vioChat), sSRl=sSRc.filter(r=>r.enLlamada).length;
+      const LL=L.filter(r=>r.enLlamada), D=L.filter(r=>["Descalificado por nicho","Descalificado por plata","Low ticket (sin plata)","No responde","Datos erróneos","Cancelado"].includes(r.estado));
+      const tablas=
+        `<div class="sect"><div class="sectt">Nicho</div>`+
+        tbl("¿Son de nicho?","Según lo que eligieron en el formulario: una de las 6 actividades de nicho o no.",[["Son de nicho",cnt(r=>r.nicho==="Nicho")],["No son de nicho",cnt(r=>r.nicho==="No nicho")],["No respondieron a qué se dedican",cnt(r=>r.nicho==="Sin dato")]],n)+`</div>`+
+        `<div class="sect"><div class="sectt">Plata</div>`+
+        tbl("Paso 1 · ¿Vieron el rango de inversión?","Dónde se les mostró el monto: en la pregunta del formulario o en un mensaje del chat.",[["En el formulario",cnt(r=>r.vioForm&&!r.vioChat)],["En el formulario y en el chat",cnt(r=>r.vioForm&&r.vioChat)],["En el chat",cnt(r=>r.vioChat&&!r.vioForm)],["Todavía no lo vieron",NV.length]],n)+
+        (NV.length?tbl(NV.length===1?"El lead que todavía no vio el rango, ¿en qué está?":`Los ${NV.length} que todavía no vieron el rango, ¿en qué están?`,"Por qué todavía no se les mostró el monto.",[["Siguen conversando, todavía no se habló de plata",cnt(r=>EN_PROCESO.includes(r.estado),NV)],["Se descartaron antes, por otro motivo",cnt(r=>DESC_OTRO.includes(r.estado),NV)],["Se descartaron por plata (se habló de plata fuera del chat)",cnt(r=>r.descPlata,NV)],["Ya tienen la llamada (se habló de plata fuera del chat)",cnt(r=>r.enLlamada,NV)],["Pendientes de revisar",cnt(r=>!r.leido,NV)]],NV.length):"")+
+        tbl("Paso 2 · ¿Qué respondieron después de ver el rango?","Respuesta a la inversión, completada con lo que pasó después: si llegó a la llamada cuenta como sí; si se descartó por plata, como no.",[["Sí",cnt(r=>r.resp==="si",V)],["Sí, con plan de pagos",cnt(r=>r.resp==="plan",V)],["No",cnt(r=>r.resp==="no",V)],["En proceso",cnt(r=>r.resp==="proceso",V)]],V.length)+
+        tbl(Y.length===1?"Paso 3 · El lead que dijo que sí, ¿qué pasó después?":`Paso 3 · Los ${Y.length} que dijeron que sí, ¿qué pasó después?`,"",[["Llegaron a la llamada",cnt(r=>r.enLlamada,Y)],["Siguen conversando",cnt(r=>EN_PROCESO.includes(r.estado),Y)],["No responden",e("No responde",Y)],["Se descartaron por otro motivo",cnt(r=>["Descalificado por nicho","Datos erróneos","Cancelado"].includes(r.estado),Y)],["Se descartaron por plata",cnt(r=>r.descPlata,Y)]],Y.length)+
+        (sSR.length?`<div class="mt"><div class="mtt">Aparte · Dijeron que sí en un formulario que no mostraba el rango</div><div class="mte">${sSR.length} respondieron que sí sin ver el monto. A ${sSRc.length} se les dijo el rango después en el chat, y ${sSRl} ${sSRl===1?"llegó":"llegaron"} a la llamada.</div></div>`:"")+`</div>`+
+        `<div class="sect"><div class="sectt">Resultado</div>`+
+        tbl(LL.length===1?"El lead que llegó a la llamada, ¿qué pasó?":`Los ${LL.length} que llegaron a la llamada, ¿qué pasó?`,"",[["Esperando la llamada (confirmada, todavía no llegó la fecha)",cnt(r=>ESPERA.includes(r.estado),LL)],["No asistieron",e("No asistió",LL)],["Asistieron sin dinero",e("Asistencia sin dinero",LL)],["Asistieron, no encajan",e("Asistencia no encaja",LL)],["Asistencia cualificada",e("Asistencia cualificada",LL)],["Seña",e("Seña",LL)],["Venta",e("Venta",LL)]],LL.length)+`</div>`+
+        `<div class="sect"><div class="sectt">Descartados</div>`+
+        tbl("¿Por qué se descartaron?","",[["Por nicho",e("Descalificado por nicho")],["Por plata",e("Descalificado por plata")],["Low ticket",e("Low ticket (sin plata)"),"No les daba el presupuesto para el programa y se les ofreció un producto más barato."],["No responden",e("No responde")],["Datos erróneos",e("Datos erróneos")],["Cancelados",e("Cancelado")]],D.length)+`</div>`+
+        `<div class="sect"><div class="sectt">Etapa en la que están hoy</div>`+
+        tbl("¿Dónde está cada lead hoy?","",ORDEN.map(k=>[k,e(k)]),n)+`</div>`;
+      // ---------- Desglose de leads ----------
+      const PLB={si:"Sí",plan:"Sí, con plan de pagos",no:"No",proceso:"En proceso"};
       const LS=[...L].sort((x,y)=>ORDEN.indexOf(x.estado)-ORDEN.indexOf(y.estado)||x.name.localeCompare(y.name));
-      const lista=`<table class="lt"><thead><tr><th>Lead</th><th>Campaña</th><th>Nicho</th><th>Vio el rango</th><th>Respuesta a la plata</th><th>Estado hoy</th></tr></thead><tbody>${LS.map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.campaign)}</td><td>${r.nicho==="Nicho"?"Sí":r.nicho==="No nicho"?"No":"Sin dato"}</td><td>${VIO(r)}</td><td>${r.vio?PL[r.resp]:r.siSinRango?"Sí (sin ver el rango)":"–"}</td><td>${esc(r.estado)}</td></tr>`).join("")}</tbody></table>`;
-      return `<section class="pcard grp"><h2>${esc(gname)}<span class="big">${n} ${sing(n,"lead","leads")}</span></h2><div class="meta">${esc(DEF[gname])}</div>
+      const lista=`<table class="lt"><thead><tr><th>Lead</th><th>Campaña</th><th>Nicho</th><th>Vio el rango</th><th>Respuesta a la plata</th><th>Estado hoy</th></tr></thead><tbody>${LS.map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(r.campaign)}</td><td>${r.nicho==="Nicho"?"Sí":r.nicho==="No nicho"?"No":"Sin dato"}</td><td>${VIO(r)}</td><td>${r.vioEf?PLB[r.resp]||"En proceso":r.siSinRango?"Sí (sin ver el rango)":"–"}</td><td>${esc(r.estado)}</td></tr>`).join("")}</tbody></table>`;
+      return `<section class="pcard grp"><h2>${esc(gname)}<span class="big">${n} ${n===1?"lead":"leads"}</span></h2><div class="meta">${esc(DEF[gname])}</div>
         <h5>Embudo</h5>${embudo}
-        <h5>Números</h5>${tabla}
+        ${tablas}
         <h5>Desglose de leads</h5><div class="scroll">${lista}</div></section>`;
     }).join("")||`<div class="status">No entraron leads en ese período.</div>`;
     document.getElementById("pPrint").classList.remove("hidden");
